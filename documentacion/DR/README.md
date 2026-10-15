@@ -63,3 +63,4 @@ Explicación clara de la alternativa elegida y la justificación técnica que fu
 | ID | Título | Fecha | Estado |
 |---|---|---|---|
 | [ADR-001](./ADR-001-stack-tecnologico.md) | Selección del Stack Tecnológico: NestJS, React y PostgreSQL | 2026-10-15 | Aceptado |
+| [ADR-002](./ADR-002-estrategia-ci-cd.md) | Estrategia de Integración Continua (CI/CD) con GitHub Actions | 2026-10-15 | Aceptado |

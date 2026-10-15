@@ -1,0 +1,75 @@
+name: CI Pipeline - Calidad y Validación
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================
+  # Job: Backend (NestJS + TypeScript)
+  # ==========================================
+  backend-validation:
+    name: Backend CI (NestJS)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias limpias
+        run: npm ci
+
+      - name: Linter & Estándares de Código (ESLint)
+        run: npm run lint
+
+      - name: Ejecutar Pruebas Unitarias (Jest)
+        run: npm run test
+
+      - name: Compilación & Type Check (Nest Build)
+        run: npm run build
+
+  # ==========================================
+  # Job: Frontend (React + TypeScript + Vite)
+  # ==========================================
+  frontend-validation:
+    name: Frontend CI (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias limpias
+        run: npm ci
+
+      - name: Linter & Reglas de Calidad (Oxlint)
+        run: npm run lint
+
+      - name: Type Check y Empaquetado de Producción (Vite Build)
+        run: npm run build

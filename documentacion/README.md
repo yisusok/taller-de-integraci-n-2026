@@ -6,6 +6,7 @@ Bienvenido al centro de documentación del proyecto **E-commerce**.
 
 * **[DR (Decision Records)](./DR/README.md):** Registros formales de decisiones de arquitectura y diseño técnico tomadas por el equipo.
   * [ADR-001: Selección del Stack Tecnológico (NestJS, React y PostgreSQL)](./DR/ADR-001-stack-tecnologico.md)
+  * [ADR-002: Estrategia de Integración Continua (CI/CD) con GitHub Actions](./DR/ADR-002-estrategia-ci-cd.md)
 * **[Diagramas](./diagramas/README.md):** Diagramas del sistema (Arquitectura general C4, Modelo Entidad-Relación de la base de datos PostgreSQL, flujos de procesos).
 
 ---
