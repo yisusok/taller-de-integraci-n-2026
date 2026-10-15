@@ -86,7 +86,14 @@ erDiagram
 
 ---
 
-## 3. Convenciones para nuevos diagramas
+## 3. Diagrama de Clases del Dominio (UML)
+
+El modelo de clases completo con sus atributos, jerarquías de herencia polimórficas (`EventoStock`, `Usuario`), multiplicidades y composiciones se encuentra documentado en:
+📄 **[Ver Diagrama de Clases Detallado en Mermaid](./diagrama-de-clases.md)**
+
+---
+
+## 4. Convenciones para nuevos diagramas
 
 * Se recomienda utilizar sintaxis **Mermaid** incrustada directamente en archivos Markdown para mantener versionado junto al código.
 * Para diagramas de diseño visual exportados (PNG, SVG, Draw.io), guardarlos en esta carpeta con un nombre descriptivo (ej: `diagrama-flujo-checkout.svg`).

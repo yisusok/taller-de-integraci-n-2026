@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visor de Diagrama de Clases - E-Commerce Dominio</title>
+  <!-- Mermaid.js -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel-bg: rgba(15, 23, 42, 0.85);
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+      user-select: none;
+    }
+
+    /* Barra superior flotante */
+    .top-bar {
+      position: fixed;
+      top: 1rem;
+      left: 1.5rem;
+      right: 1.5rem;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      padding: 0.75rem 1.25rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .title-area {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn {
+      background: rgba(30, 41, 59, 0.8);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: #334155;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .zoom-level {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #a5b4fc;
+      min-width: 50px;
+      text-align: center;
+    }
+
+    /* Lienzo infinito */
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      cursor: grab;
+      background: radial-gradient(#1e293b 1px, transparent 1px), #090d16;
+      background-size: 24px 24px;
+      overflow: hidden;
+    }
+
+    #canvas.grabbing {
+      cursor: grabbing;
+    }
+
+    #viewport {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+      padding: 100px;
+    }
+
+    /* Estilos del diagrama SVG */
+    #viewport svg {
+      display: block;
+      height: auto !important;
+      max-width: none !important;
+    }
+
+    /* Cartel flotante de ayuda */
+    .hint-box {
+      position: fixed;
+      bottom: 1.25rem;
+      left: 1.5rem;
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      pointer-events: none;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      z-index: 999;
+      transition: opacity 0.3s ease;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(99, 102, 241, 0.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading-overlay" id="loader">
+    <div class="spinner"></div>
+    <p style="color: #94a3b8; font-size: 0.95rem;">Renderizando diagrama de clases en alta resolución...</p>
+  </div>
+
+  <header class="top-bar">
+    <div class="title-area">
+      <h1>Diagrama de Clases UML &bull; Dominio E-Commerce</h1>
+      <span class="badge">Canvas Infinito</span>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" id="btn-zoom-in" title="Acercar (Rueda del ratón hacia arriba)">➕ Acercar</button>
+      <span class="zoom-level" id="zoom-text">100%</span>
+      <button class="btn" id="btn-zoom-out" title="Alejar (Rueda del ratón hacia abajo)">➖ Alejar</button>
+      <button class="btn" id="btn-fit" title="Ajustar al tamaño de la pantalla">🔲 Ajustar Vista</button>
+      <button class="btn" id="btn-reset" title="Ver en escala real 100%">🔍 Escala 1:1</button>
+      <button class="btn" id="btn-fullscreen" title="Pantalla completa">⛶ Pantalla Completa</button>
+    </div>
+  </header>
+
+  <div id="canvas">
+    <div id="viewport">
+      <div id="diagram-mount"></div>
+    </div>
+  </div>
+
+  <div class="hint-box">
+    🖐️ <strong>Navegación:</strong> Haz clic y arrastra en cualquier parte para moverte. Rueda del ratón para Zoom suave.
+  </div>
+
+  <!-- Código Mermaid para renderizado dinámico -->
+  <pre id="mermaid-raw" style="display: none;">
+classDiagram
+    direction TB
+
+    class Usuario {
+        +UUID id
+        +string nombre
+        +string email
+        +string password
+        +string metodoAuth
+        +Date fechaRegistro
+    }
+
+    class AdminVentas {
+        +string permisos
+    }
+
+    class Cliente {
+    }
+
+    class Direccion {
+        +UUID id
+        +string calle
+        +int numero
+        +string ciudad
+        +int cp
+    }
+
+    class Pedido {
+        +UUID id
+        +int numero
+        +Date fecha
+        +EstadoPedido estado
+        +float total
+    }
+
+    class ItemPedido {
+        +UUID id
+        +int cantidad
+        +float precioUnitario
+    }
+
+    class Pago {
+        +UUID id
+        +string preferenciaId
+        +float monto
+        +EstadoPago estado
+        +string metodoPago
+    }
+
+    class Comprobante {
+        +UUID id
+        +string skuBase
+        +date FEmision
+        +string urlPdf
+    }
+
+    class Carrito {
+        +UUID id
+    }
+
+    class ItemCarrito {
+        +UUID id
+        +int cantidad
+        +float precioUnitario
+    }
+
+    class Cupon {
+        +UUID id
+        +string codigo
+        +float porcentajeDescuento
+        +date FIVigencia
+        +date FFVigencia
+        +float tope
+    }
+
+    class EventoStock {
+        +UUID id
+        +Date fecha
+        +int cantidad
+        +date timestamp
+    }
+
+    class VentaCliente {
+    }
+
+    class IngresoAuth {
+        +string nombreAuth
+        +float costoUnitario
+    }
+
+    class ExtraccionManual {
+        +MotivoExtraccion motivo
+        +string justificacion
+    }
+
+    class Producto {
+        +UUID id
+        +string skuBase
+        +float precioVenta
+        +string nombre
+        +float costo
+        +int stockActual
+        +EstadoProducto estado
+        +string garantia
+    }
+
+    class VarianteProducto {
+        +UUID id
+        +int talle
+        +string color
+        +string skuVariante
+        +string material
+    }
+
+    class Categoria {
+        +UUID id
+        +string nombre
+    }
+
+    class EtiquetaUso {
+        +UUID id
+        +string disciplina
+    }
+
+    class Marca {
+        +UUID id
+        +string nombre
+    }
+
+    class Combo {
+        +UUID id
+        +string nombre
+        +float precioCombo
+    }
+
+    class Visitante {
+        +UUID SesionId
+    }
+
+    %% Jerarquías de Herencia
+    Usuario <|-- AdminVentas
+    Usuario <|-- Cliente
+    EventoStock <|-- VentaCliente
+    EventoStock <|-- IngresoAuth
+    EventoStock <|-- ExtraccionManual
+
+    %% Relaciones Usuario / Cliente / Admin
+    AdminVentas "1" --> "*" Pedido : Gestiona
+    AdminVentas "1" --> "*" EventoStock : Registra
+    Cliente "1" --> "*" Pedido : Realiza
+    Cliente "1" --> "1" Carrito : Posee
+    Cliente "1" --> "1..3" Direccion : Registra
+    Cliente "*" --> "*" Cupon : Posee
+    Cliente "*" --> "*" Producto : Marca como favorito a
+
+    %% Pedido / Pago / Comprobante
+    Pedido "1" *-- "1..*" ItemPedido : Contiene
+    Pedido "1" --> "1" Pago : Requiere
+    Pago "1" --> "1" Comprobante : Genera
+    Pedido "1" --> "1" VentaCliente : Se asocia a
+
+    %% Carrito / Items / Cupon
+    Carrito "1" *-- "*" ItemCarrito : Contiene
+    Carrito --> "0..1" Cupon : Aplica
+    ItemCarrito "*" --> "1" Producto : Referencia a
+    ItemPedido "*" --> "1" Producto : Corresponde a
+
+    %% Catálogo y Producto
+    Producto "1" *-- "1..*" VarianteProducto : Contiene
+    Producto "*" --> "1" Categoria : Clasifica en
+    Producto "*" --> "*" EtiquetaUso : Se asocia con
+    Producto "*" --> "1" Marca : Pertenece
+    Combo "1" *-- "1..*" Producto : incluye
+
+    %% Eventos de Stock y Visitante
+    EventoStock "*" --> "1" Producto : Afecta a
+    Visitante "*" --> "*" Producto : Consulta
+  </pre>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      themeVariables: {
+        darkMode: true,
+        background: '#090d16',
+        primaryColor: '#1e1b4b',
+        primaryTextColor: '#f8fafc',
+        primaryBorderColor: '#6366f1',
+        lineColor: '#818cf8',
+        secondaryColor: '#1e293b',
+        tertiaryColor: '#0f172a',
+        fontSize: '15px'
+      }
+    });
+
+    // Estado del Canvas Interactivo
+    let scale = 0.85;
+    let panX = 60;
+    let panY = 90;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+
+    const canvas = document.getElementById('canvas');
+    const viewport = document.getElementById('viewport');
+    const zoomText = document.getElementById('zoom-text');
+
+    function updateTransform() {
+      viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+      zoomText.textContent = `${Math.round(scale * 100)}%`;
+    }
+
+    // Renderizar diagrama
+    async function renderDiagram() {
+      const graphCode = document.getElementById('mermaid-raw').textContent;
+      try {
+        const { svg } = await mermaid.render('mermaid-rendered-svg', graphCode);
+        const mount = document.getElementById('diagram-mount');
+        mount.innerHTML = svg;
+
+        // Quitar overlay de carga
+        const loader = document.getElementById('loader');
+        loader.style.opacity = '0';
+        setTimeout(() => loader.remove(), 300);
+
+        // Centrado inicial agradable y legible
+        autoFit();
+      } catch (err) {
+        console.error('Error al renderizar Mermaid:', err);
+      }
+    }
+
+    function autoFit() {
+      const svg = document.querySelector('#diagram-mount svg');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+
+      // Escala adecuada que no sea diminuta
+      const scaleX = (canvasRect.width - 120) / (rect.width / scale);
+      const scaleY = (canvasRect.height - 180) / (rect.height / scale);
+      scale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.4), 1.1);
+
+      // Centrar en pantalla
+      panX = (canvasRect.width - (rect.width / (scale || 1)) * scale) / 2;
+      panY = 100;
+      updateTransform();
+    }
+
+    // Drag & Pan con Mouse
+    canvas.addEventListener('mousedown', (e) => {
+      // Ignorar si se hace clic en botones flotantes
+      if (e.target.closest('.top-bar') || e.target.closest('.hint-box')) return;
+      isDragging = true;
+      canvas.classList.add('grabbing');
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+      canvas.classList.remove('grabbing');
+    });
+
+    // Zoom con rueda del ratón centrado en el puntero
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.15;
+      const oldScale = scale;
+
+      if (e.deltaY < 0) {
+        scale = Math.min(scale * zoomFactor, 4.0); // Zoom in
+      } else {
+        scale = Math.max(scale / zoomFactor, 0.2); // Zoom out
+      }
+
+      // Ajustar pan para que haga zoom hacia donde apunta el cursor
+      const mouseX = e.clientX;
+      const mouseY = e.clientY;
+      panX = mouseX - ((mouseX - panX) / oldScale) * scale;
+      panY = mouseY - ((mouseY - panY) / oldScale) * scale;
+
+      updateTransform();
+    }, { passive: false });
+
+    // Botones de Toolbar
+    document.getElementById('btn-zoom-in').addEventListener('click', () => {
+      scale = Math.min(scale * 1.25, 4.0);
+      updateTransform();
+    });
+
+    document.getElementById('btn-zoom-out').addEventListener('click', () => {
+      scale = Math.max(scale / 1.25, 0.2);
+      updateTransform();
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      scale = 1.0;
+      panX = (canvas.clientWidth - 800) / 2;
+      panY = 120;
+      updateTransform();
+    });
+
+    document.getElementById('btn-fit').addEventListener('click', autoFit);
+
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    });
+
+    // Iniciar
+    window.addEventListener('DOMContentLoaded', renderDiagram);
+  </script>
+</body>
+</html>
