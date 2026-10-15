@@ -42,17 +42,28 @@ erDiagram
     }
 
     PRODUCTO ||--o{ ITEM_ORDEN : incluye
+    PRODUCTO ||--o{ STOCK_MOVEMENT : registra_movimientos
     PRODUCTO {
         uuid id PK
         uuid categoria_id FK
         string nombre
         string descripcion
         decimal precio
-        int stock
         string imagen_url
         boolean activo
     }
 
+    STOCK_MOVEMENT {
+        uuid id PK
+        uuid variante_id FK
+        string tipo_movimiento "INGRESO_PROVEEDOR | VENTA | EXTRACCION_MANUAL"
+        int cantidad "Mayor a 0"
+        string motivo
+        uuid usuario_id FK
+        datetime created_at
+    }
+
+    USUARIO ||--o{ STOCK_MOVEMENT : autoriza
     ORDEN ||--|{ ITEM_ORDEN : contiene
     ORDEN {
         uuid id PK
@@ -70,6 +81,8 @@ erDiagram
         decimal precio_unitario
     }
 ```
+
+> **Nota Arquitectónica:** No existe el campo mutable `stock` directamente en `PRODUCTO`. Las existencias se derivan exclusivamente del consolidado de `STOCK_MOVEMENT` (patrón Append-Only Ledger).
 
 ---
 
