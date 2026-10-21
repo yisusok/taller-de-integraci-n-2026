@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { Usuario } from './usuario.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AppService } from './app.service';
         password: config.get<string>('DB_PASSWORD', 'postgres'),
         database: config.get<string>('DB_NAME', 'ecommerce_db'),
         autoLoadEntities: true,
+        entities: [Usuario],
         synchronize: config.get<string>('NODE_ENV') !== 'production', // Solo para desarrollo
       }),
     }),

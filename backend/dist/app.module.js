@@ -12,6 +12,7 @@ const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
+const usuario_entity_1 = require("./usuario.entity");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -33,6 +34,7 @@ exports.AppModule = AppModule = __decorate([
                     password: config.get('DB_PASSWORD', 'postgres'),
                     database: config.get('DB_NAME', 'ecommerce_db'),
                     autoLoadEntities: true,
+                    entities: [usuario_entity_1.Usuario],
                     synchronize: config.get('NODE_ENV') !== 'production',
                 }),
             }),
