@@ -4,9 +4,10 @@ node_modules/
 .pnp.js
 
 # Compilación y builds
-/dist
-/build
+dist/
+build/
 out/
+*.pdf
 
 # Variables de entorno y secretos
 .env

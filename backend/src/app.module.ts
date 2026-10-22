@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+﻿import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { Usuario } from './usuario.entity';
+import { User } from './users/entities/user.entity';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -22,10 +23,11 @@ import { Usuario } from './usuario.entity';
         password: config.get<string>('DB_PASSWORD', 'postgres'),
         database: config.get<string>('DB_NAME', 'ecommerce_db'),
         autoLoadEntities: true,
-        entities: [Usuario],
+        entities: [User],
         synchronize: config.get<string>('NODE_ENV') !== 'production', // Solo para desarrollo
       }),
     }),
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
