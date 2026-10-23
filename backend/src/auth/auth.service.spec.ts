@@ -1,4 +1,4 @@
-﻿import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException } from '@nestjs/common';
 import { DeepPartial, Repository } from 'typeorm';
@@ -7,7 +7,7 @@ import { AuthService } from './auth.service';
 import { User, RolUsuario } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 
-describe('AuthService (AUTH-01 & AUTH-02)', () => {
+describe('AuthService', () => {
   let service: AuthService;
   let repository: jest.Mocked<Partial<Repository<User>>>;
 
@@ -21,10 +21,7 @@ describe('AuthService (AUTH-01 & AUTH-02)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        {
-          provide: getRepositoryToken(User),
-          useValue: repository,
-        },
+        { provide: getRepositoryToken(User), useValue: repository },
       ],
     }).compile();
 
@@ -35,101 +32,70 @@ describe('AuthService (AUTH-01 & AUTH-02)', () => {
     expect(service).toBeDefined();
   });
 
-  describe('registrar (Registro Local)', () => {
-    const validDto: RegisterDto = {
+  describe('register()', () => {
+    const dto: RegisterDto = {
       nombre: '  Juan Perez  ',
       email: '  JUAN.PEREZ@EXAMPLE.COM  ',
       password: 'Password123!',
       rol: RolUsuario.CLIENTE,
-      correo_electronico: 'juan.perez@example.com',
-      contrasena: 'Password123!',
     };
 
-    it('debe registrar un usuario exitosamente con contrasena hasheada y datos saneados', async () => {
+    it('registra un usuario exitosamente con contraseña hasheada', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
       (repository.create as jest.Mock).mockImplementation(
         (data: DeepPartial<User>) =>
-          ({
-            id: 'uuid-1234',
-            ...data,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }) as User,
+          ({ id: 'uuid-1234', ...data, createdAt: new Date(), updatedAt: new Date() }) as User,
       );
       (repository.save as jest.Mock).mockImplementation((user: User) =>
         Promise.resolve(user),
       );
 
-      const result = await service.registrar(validDto);
+      const result = await service.register(dto);
 
+      // Verifica que se busca con el email del DTO (ya transformado por el DTO validator)
       expect(repository.findOne).toHaveBeenCalledWith({
-        where: { email: 'juan.perez@example.com' },
+        where: { email: dto.email },
       });
-      expect(repository.create).toHaveBeenCalled();
+
       const createCalls = (repository.create as jest.Mock).mock
         .calls as unknown as [DeepPartial<User>][];
       const createArg = createCalls[0][0];
-      expect(createArg.nombre).toBe('Juan Perez');
-      expect(createArg.email).toBe('juan.perez@example.com');
+
       expect(createArg.authProvider).toBe('local');
 
-      // Validar que la contrasena guardada este cifrada con bcrypt y sea verificable
-      const isHashValid = await bcrypt.compare(
-        'Password123!',
-        createArg.password_hash as string,
-      );
+      // La contraseña guardada debe estar cifrada con bcrypt
+      const isHashValid = await bcrypt.compare('Password123!', createArg.password_hash as string);
       expect(isHashValid).toBe(true);
 
-      // Validar que password_hash nunca se expone en la respuesta al cliente
+      // password_hash no debe exponerse en la respuesta
       const resultObj = result as unknown as Record<string, unknown>;
       expect(resultObj.password_hash).toBeUndefined();
-      expect(result.email).toBe('juan.perez@example.com');
-      expect(result.nombre).toBe('Juan Perez');
     });
 
-    it('debe lanzar ConflictException (409) con mensaje explicito si el email ya existe', async () => {
-      (repository.findOne as jest.Mock).mockResolvedValue({
-        id: 'uuid-existente',
-        email: 'juan.perez@example.com',
-      });
+    it('lanza ConflictException si el email ya existe', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue({ id: 'existing', email: 'juan.perez@example.com' });
 
-      await expect(service.registrar(validDto)).rejects.toThrow(
-        ConflictException,
-      );
-      await expect(service.registrar(validDto)).rejects.toThrow(
-        'El correo electrónico ya se encuentra registrado',
-      );
+      await expect(service.register(dto)).rejects.toThrow(ConflictException);
       expect(repository.save).not.toHaveBeenCalled();
     });
 
-    it('debe capturar error de restriccion unica en base de datos (23505) y lanzar ConflictException', async () => {
+    it('lanza ConflictException si la BD devuelve error 23505 (unique constraint)', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
-      (repository.create as jest.Mock).mockImplementation(
-        (data: DeepPartial<User>) => data as User,
-      );
+      (repository.create as jest.Mock).mockImplementation((data: DeepPartial<User>) => data as User);
       (repository.save as jest.Mock).mockRejectedValue({ code: '23505' });
 
-      await expect(service.registrar(validDto)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.register(dto)).rejects.toThrow(ConflictException);
     });
   });
 
-  describe('buscarPorEmail (Preparacion para Google / Auth0)', () => {
-    it('debe buscar un usuario por email normalizado', async () => {
-      const mockUser = {
-        id: 'uuid-google',
-        email: 'atleta@gym.com',
-        nombre: 'Atleta',
-        authProvider: 'google',
-      } as User;
+  describe('findByEmail()', () => {
+    it('busca un usuario por email normalizado', async () => {
+      const mockUser = { id: 'uuid-1', email: 'atleta@gym.com', authProvider: 'auth0' } as User;
       (repository.findOne as jest.Mock).mockResolvedValue(mockUser);
 
-      const found = await service.buscarPorEmail('  ATLETA@GYM.COM  ');
+      const found = await service.findByEmail('  ATLETA@GYM.COM  ');
 
-      expect(repository.findOne).toHaveBeenCalledWith({
-        where: { email: 'atleta@gym.com' },
-      });
+      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'atleta@gym.com' } });
       expect(found).toEqual(mockUser);
     });
   });

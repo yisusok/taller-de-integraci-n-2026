@@ -1,6 +1,6 @@
-﻿import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
-import { AuthService, UserWithoutPassword } from './auth.service';
+import { AuthService, PublicUser } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { RolUsuario } from '../users/entities/user.entity';
 
@@ -8,7 +8,7 @@ describe('AuthController', () => {
   let controller: AuthController;
   let authService: Partial<AuthService>;
 
-  const mockUserResult: UserWithoutPassword = {
+  const mockUser: PublicUser = {
     id: 'uuid-1234',
     nombre: 'Carlos Gomez',
     email: 'carlos@example.com',
@@ -17,23 +17,16 @@ describe('AuthController', () => {
     providerId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-    correo_electronico: 'carlos@example.com',
-    contrasena_hash: null,
   };
 
   beforeEach(async () => {
     authService = {
-      registrar: jest.fn().mockResolvedValue(mockUserResult),
+      register: jest.fn().mockResolvedValue(mockUser),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
-      providers: [
-        {
-          provide: AuthService,
-          useValue: authService,
-        },
-      ],
+      providers: [{ provide: AuthService, useValue: authService }],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);
@@ -43,34 +36,18 @@ describe('AuthController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('debe registrar a un usuario mediante POST /register', async () => {
+  it('POST /api/auth/register → registra un usuario y devuelve PublicUser', async () => {
     const dto: RegisterDto = {
       nombre: 'Carlos Gomez',
       email: 'carlos@example.com',
       password: 'SuperSecret1!',
-      correo_electronico: 'carlos@example.com',
-      contrasena: 'SuperSecret1!',
     };
 
     const result = await controller.register(dto);
 
-    expect(authService.registrar).toHaveBeenCalledWith(dto);
+    expect(authService.register).toHaveBeenCalledWith(dto);
     expect(result.id).toBe('uuid-1234');
     expect(result.email).toBe('carlos@example.com');
-  });
-
-  it('debe registrar a un usuario mediante POST /registro (alias)', async () => {
-    const dto: RegisterDto = {
-      nombre: 'Carlos Gomez',
-      email: 'carlos@example.com',
-      password: 'SuperSecret1!',
-      correo_electronico: 'carlos@example.com',
-      contrasena: 'SuperSecret1!',
-    };
-
-    const result = await controller.registro(dto);
-
-    expect(authService.registrar).toHaveBeenCalledWith(dto);
-    expect(result.id).toBe('uuid-1234');
+    expect((result as unknown as Record<string, unknown>).password_hash).toBeUndefined();
   });
 });

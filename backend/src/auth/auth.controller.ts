@@ -1,24 +1,21 @@
-﻿import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { AuthService, UserWithoutPassword } from './auth.service';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { AuthService, PublicUser } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { SyncOauthDto } from './dto/sync-oauth.dto';
 
-@Controller(['auth', 'api/auth'])
+@Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async register(
-    @Body() registerDto: RegisterDto,
-  ): Promise<UserWithoutPassword> {
-    return this.authService.registrar(registerDto);
+  register(@Body() dto: RegisterDto): Promise<PublicUser> {
+    return this.authService.register(dto);
+  }
+  @Post('sync-oauth')
+  @HttpCode(HttpStatus.OK)
+  syncOauth(@Body() dto: SyncOauthDto): Promise<PublicUser> {
+    return this.authService.syncOauth(dto);
   }
 
-  @Post('registro')
-  @HttpCode(HttpStatus.CREATED)
-  async registro(
-    @Body() registerDto: RegisterDto,
-  ): Promise<UserWithoutPassword> {
-    return this.authService.registrar(registerDto);
-  }
 }
