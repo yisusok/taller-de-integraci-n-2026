@@ -1,4 +1,4 @@
-﻿import {
+import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
@@ -33,20 +33,16 @@ export class User {
   })
   rol!: RolUsuario;
 
-  @Column({
-    type: 'varchar',
-    length: 50,
-    default: 'local',
-    name: 'auth_provider',
-  })
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  avatar?: string | null;
+
+
+  // 'local' | 'auth0' — preparado para Auth0
+  @Column({ type: 'varchar', length: 50, default: 'local', name: 'auth_provider' })
   authProvider!: string;
 
-  @Column({
-    type: 'varchar',
-    length: 255,
-    nullable: true,
-    name: 'provider_id',
-  })
+  // Sub de Auth0 (ej: auth0|64f...) — nulo para usuarios locales
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'provider_id' })
   providerId?: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
@@ -54,20 +50,4 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
-
-  get correo_electronico(): string {
-    return this.email;
-  }
-  set correo_electronico(val: string) {
-    this.email = val;
-  }
-
-  get contrasena_hash(): string | null {
-    return this.password_hash;
-  }
-  set contrasena_hash(val: string | null) {
-    this.password_hash = val;
-  }
 }
-
-export { User as Usuario };
