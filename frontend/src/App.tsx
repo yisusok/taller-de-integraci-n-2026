@@ -1,117 +1,158 @@
 import { useState } from 'react'
 import './App.css'
 
+interface ProductItem {
+  id: string
+  nombre: string
+  categoria: string
+  precioVenta: number
+  skuBase: string
+  talles: number[]
+  colores: string[]
+}
+
+const SAMPLE_PRODUCTS: ProductItem[] = [
+  {
+    id: '1',
+    nombre: 'Zapatillas Deportivas Runner Pro',
+    categoria: 'Calzado',
+    precioVenta: 89999,
+    skuBase: 'ZAP-RUN-01',
+    talles: [39, 40, 41, 42, 43],
+    colores: ['Negro', 'Azul', 'Blanco'],
+  },
+  {
+    id: '2',
+    nombre: 'Remera Técnica Dry-Fit',
+    categoria: 'Indumentaria',
+    precioVenta: 24999,
+    skuBase: 'REM-DRY-02',
+    talles: [1, 2, 3, 4], // Talles S, M, L, XL
+    colores: ['Negro', 'Gris', 'Rojo'],
+  },
+  {
+    id: '3',
+    nombre: 'Buzo Hoodie Essential',
+    categoria: 'Indumentaria',
+    precioVenta: 54999,
+    skuBase: 'BUZ-ESS-03',
+    talles: [2, 3, 4],
+    colores: ['Negro', 'Beige', 'Verde'],
+  },
+  {
+    id: '4',
+    nombre: 'Pantalón Jogger Training',
+    categoria: 'Indumentaria',
+    precioVenta: 42999,
+    skuBase: 'PAN-JOG-04',
+    talles: [38, 40, 42],
+    colores: ['Negro', 'Gris Oscuro'],
+  },
+]
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'quickstart'>('overview')
+  const [cartCount, setCartCount] = useState(0)
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, { talle?: number; color?: string }>>({})
+
+  const handleSelectVariant = (productId: string, key: 'talle' | 'color', val: any) => {
+    setSelectedVariants((prev) => ({
+      ...prev,
+      [productId]: {
+        ...prev[productId],
+        [key]: val,
+      },
+    }))
+  }
+
+  const handleAddToCart = (product: ProductItem) => {
+    const variant = selectedVariants[product.id]
+    if (!variant?.talle || !variant?.color) {
+      alert(`Por favor, selecciona talle y color para ${product.nombre}`)
+      return
+    }
+    setCartCount((c) => c + 1)
+  }
 
   return (
-    <div className="app-container">
-      <header>
-        <div className="badge">
-          <span className="pulse-dot"></span>
-          Infraestructura Inicializada
+    <div className="store-container">
+      {/* Navbar */}
+      <nav className="navbar">
+        <div className="logo-group">
+          <span className="logo-icon">🛍️</span>
+          <span className="logo-text">E-COMMERCE 2026</span>
         </div>
-        <h1 className="hero-title">E-Commerce Platform</h1>
-        <p className="hero-subtitle">
-          Taller de Integración 2026 &mdash; Arquitectura basada en NestJS, React y PostgreSQL con registro de decisiones y diagramas.
-        </p>
-      </header>
-
-      <div className="cards-grid">
-        <div className="card">
-          <div>
-            <span className="card-icon">⚡</span>
-            <h2 className="card-title">Frontend React</h2>
-            <p className="card-desc">
-              Interfaz de usuario SPA construida con React 19, TypeScript y empaquetador Vite para máximo rendimiento.
-            </p>
-          </div>
-          <div className="card-meta">
-            <span className="status-tag">● Listo</span>
-            <span className="port-tag">localhost:5173</span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div>
-            <span className="card-icon">🛡️</span>
-            <h2 className="card-title">Backend NestJS</h2>
-            <p className="card-desc">
-              API REST modular con inyección de dependencias, TypeScript estricto y TypeORM configurado.
-            </p>
-          </div>
-          <div className="card-meta">
-            <span className="status-tag">● Listo</span>
-            <span className="port-tag">localhost:3000</span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div>
-            <span className="card-icon">🐘</span>
-            <h2 className="card-title">PostgreSQL</h2>
-            <p className="card-desc">
-              Base de datos relacional para consistencia ACID de inventarios, carritos y órdenes de compra.
-            </p>
-          </div>
-          <div className="card-meta">
-            <span className="status-tag">● Local / Nativo</span>
-            <span className="port-tag">localhost:5432</span>
-          </div>
-        </div>
-      </div>
-
-      <section className="doc-section">
-        <h3>📂 Documentación & Decision Records (DR)</h3>
-        <p>
-          El proyecto cuenta con un sistema de <strong>Architecture Decision Records (ADR)</strong> y diagramas estructurados en la carpeta <code>/documentacion</code>.
-        </p>
-        <div className="doc-links">
-          <a
-            href="https://github.com"
-            onClick={(e) => {
-              e.preventDefault()
-              alert('Revisa la carpeta /documentacion/DR en tu proyecto.')
-            }}
-            className="doc-btn"
-          >
-            📋 Ver ADRs (/documentacion/DR)
-          </a>
-          <a
-            href="https://github.com"
-            onClick={(e) => {
-              e.preventDefault()
-              alert('Revisa la carpeta /documentacion/diagramas en tu proyecto.')
-            }}
-            className="doc-btn secondary"
-          >
-            📊 Ver Diagramas (/documentacion/diagramas)
-          </a>
-          <button
-            onClick={() => setActiveTab(activeTab === 'overview' ? 'quickstart' : 'overview')}
-            className="doc-btn secondary"
-          >
-            {activeTab === 'overview' ? '📖 Guía de Comandos' : '⬅ Volver al Resumen'}
+        <div className="nav-actions">
+          <button className="cart-btn">
+            🛒 Carrito <span className="cart-badge">{cartCount}</span>
           </button>
         </div>
+      </nav>
 
-        {activeTab === 'quickstart' && (
-          <div style={{ marginTop: '1.5rem', background: 'rgba(15, 23, 42, 0.7)', padding: '1rem', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.9rem', color: '#cbd5e1' }}>
-            <p style={{ margin: '0 0 0.5rem 0', color: '#818cf8', fontWeight: 600 }}>Comandos rápidos:</p>
-            <div># 1. Base de datos PostgreSQL (Servicio local / pgAdmin)</div>
-            <div style={{ color: '#38bdf8' }}>CREATE DATABASE ecommerce_db;</div>
-            <br />
-            <div># 2. Iniciar Backend (NestJS)</div>
-            <div style={{ color: '#38bdf8' }}>cd backend &amp;&amp; npm run start:dev</div>
-            <br />
-            <div># 3. Iniciar Frontend (React)</div>
-            <div style={{ color: '#38bdf8' }}>cd frontend &amp;&amp; npm run dev</div>
-          </div>
-        )}
-      </section>
+      {/* Hero */}
+      <header className="hero-banner">
+        <h1>Catálogo de Temporada</h1>
+        <p>Selecciona tu producto y variante preferida para comprar.</p>
+      </header>
 
-      <footer className="footer">
-        Taller de Integración 2026 &bull; Infraestructura inicializada con éxito
+      {/* Product Grid */}
+      <main className="product-grid">
+        {SAMPLE_PRODUCTS.map((prod) => {
+          const currentVariant = selectedVariants[prod.id] || {}
+          return (
+            <article key={prod.id} className="product-card">
+              <div className="product-category">{prod.categoria}</div>
+              <h2 className="product-title">{prod.nombre}</h2>
+              <div className="product-sku">SKU Base: {prod.skuBase}</div>
+              <div className="product-price">${prod.precioVenta.toLocaleString('es-AR')}</div>
+
+              {/* Talles */}
+              <div className="variant-group">
+                <span className="variant-label">Talle:</span>
+                <div className="variant-options">
+                  {prod.talles.map((talle) => (
+                    <button
+                      key={talle}
+                      type="button"
+                      className={`variant-btn ${currentVariant.talle === talle ? 'active' : ''}`}
+                      onClick={() => handleSelectVariant(prod.id, 'talle', talle)}
+                    >
+                      {talle}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Colores */}
+              <div className="variant-group">
+                <span className="variant-label">Color:</span>
+                <div className="variant-options">
+                  {prod.colores.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`variant-btn ${currentVariant.color === color ? 'active' : ''}`}
+                      onClick={() => handleSelectVariant(prod.id, 'color', color)}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="add-to-cart-btn"
+                onClick={() => handleAddToCart(prod)}
+              >
+                Agregar al Carrito
+              </button>
+            </article>
+          )
+        })}
+      </main>
+
+      <footer className="store-footer">
+        &copy; 2026 E-Commerce &bull; Taller de Integración
       </footer>
     </div>
   )
