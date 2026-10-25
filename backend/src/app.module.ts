@@ -3,6 +3,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ProductosModule } from './productos/productos.module';
+import { CategoriasModule } from './categorias/categorias.module';
+import { VariantesModule } from './variantes/variantes.module';
 
 @Module({
   imports: [
@@ -24,6 +27,9 @@ import { AppService } from './app.service';
         synchronize: config.get<string>('NODE_ENV') !== 'production', // Solo para desarrollo
       }),
     }),
+    ProductosModule,
+    CategoriasModule,
+    VariantesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

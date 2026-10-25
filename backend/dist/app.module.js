@@ -12,6 +12,9 @@ const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
+const productos_module_1 = require("./productos/productos.module");
+const categorias_module_1 = require("./categorias/categorias.module");
+const variantes_module_1 = require("./variantes/variantes.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -36,6 +39,9 @@ exports.AppModule = AppModule = __decorate([
                     synchronize: config.get('NODE_ENV') !== 'production',
                 }),
             }),
+            productos_module_1.ProductosModule,
+            categorias_module_1.CategoriasModule,
+            variantes_module_1.VariantesModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
