@@ -36,12 +36,9 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar?: string | null;
 
-
-  // 'local' | 'auth0' — preparado para Auth0
   @Column({ type: 'varchar', length: 50, default: 'local', name: 'auth_provider' })
   authProvider!: string;
 
-  // Sub de Auth0 (ej: auth0|64f...) — nulo para usuarios locales
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'provider_id' })
   providerId?: string | null;
 
@@ -50,4 +47,11 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
+
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'reset_password_token' })
+  resetPasswordToken?: string | null;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'reset_password_expires' })
+  resetPasswordExpires?: Date | null;
+
 }

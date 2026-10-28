@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService, PublicUser } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { SyncOauthDto } from './dto/sync-oauth.dto';
 import { RolUsuario } from '../users/entities/user.entity';
 
 describe('AuthController', () => {
@@ -22,6 +23,12 @@ describe('AuthController', () => {
   beforeEach(async () => {
     authService = {
       register: jest.fn().mockResolvedValue(mockUser),
+      syncOauth: jest.fn().mockResolvedValue({
+        ...mockUser,
+        authProvider: 'google',
+        avatar: 'https://example.com/avatar.jpg',
+        providerId: 'google-oauth2|123456',
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -49,5 +56,21 @@ describe('AuthController', () => {
     expect(result.id).toBe('uuid-1234');
     expect(result.email).toBe('carlos@example.com');
     expect((result as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+  });
+
+  it('POST /api/auth/sync-oauth → sincroniza cuenta Google OAuth y devuelve PublicUser', async () => {
+    const dto: SyncOauthDto = {
+      nombre: 'Carlos Gomez',
+      email: 'carlos@example.com',
+      avatar: 'https://example.com/avatar.jpg',
+      providerId: 'google-oauth2|123456',
+    };
+
+    const result = await controller.syncOauth(dto);
+
+    expect(authService.syncOauth).toHaveBeenCalledWith(dto);
+    expect(result.id).toBe('uuid-1234');
+    expect(result.avatar).toBe('https://example.com/avatar.jpg');
+    expect(result.authProvider).toBe('google');
   });
 });

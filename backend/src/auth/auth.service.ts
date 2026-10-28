@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -9,7 +10,9 @@ import * as bcrypt from 'bcryptjs';
 import { User, RolUsuario } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
-
+import * as crypto from 'crypto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 export type PublicUser = Omit<User, 'password_hash'>;
 
 @Injectable()
@@ -59,7 +62,6 @@ export class AuthService {
   async syncOauth(dto: SyncOauthDto): Promise<PublicUser> {
     const emailLimpio = dto.email.trim().toLowerCase();
 
-    // 1. Buscamos si ya existe por email
     let user = await this.userRepository.findOne({
       where: { email: emailLimpio },
     });
@@ -84,9 +86,60 @@ export class AuthService {
       }
     }
 
-    const saved = await this.userRepository.save(user);
-    const { password_hash: _, ...publicUser } = saved;
-    return publicUser as PublicUser;
+    try {
+      const saved = await this.userRepository.save(user);
+      const { password_hash: _, ...publicUser } = saved;
+      return publicUser as PublicUser;
+    } catch (error: unknown) {
+      throw new InternalServerErrorException('Error al sincronizar el usuario OAuth');
+    }
+  }
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const emailLimpio = dto.email.trim().toLowerCase();
+    const user = await this.userRepository.findOne({ where: { email: emailLimpio } });
+
+    if (!user) {
+      return { message: 'Si el correo está registrado, se enviará un enlace de recuperación.' };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+    await this.userRepository.save(user);
+
+    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
+    console.log(`\n📧 ================= RECUPERACIÓN DE CONTRASEÑA =================`);
+    console.log(`Para: ${user.email}`);
+    console.log(`Enlace: ${resetLink}`);
+    console.log(`=================================================================\n`);
+
+    return {
+      message: 'Si el correo está registrado, se enviará un enlace de recuperación.',
+      ...(process.env.NODE_ENV !== 'production' && { token, resetLink }),
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.userRepository.findOne({
+      where: { resetPasswordToken: dto.token },
+    });
+
+    if (!user || !user.resetPasswordExpires) {
+      throw new BadRequestException('El token de recuperación es inválido o no existe.');
+    }
+
+    if (user.resetPasswordExpires < new Date()) {
+      throw new BadRequestException('El token de recuperación ha expirado. Solicita uno nuevo.');
+    }
+
+    user.password_hash = await bcrypt.hash(dto.newPassword, 10);
+
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await this.userRepository.save(user);
+
+    return { message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.' };
   }
 
 }

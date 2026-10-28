@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import './RegisterForm.css';
 
@@ -27,7 +27,6 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
 }) => {
   const { loginWithRedirect, logout, isAuthenticated, user, isLoading: authLoading } = useAuth0();
 
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [contrasena, setContrasena] = useState('');
@@ -38,6 +37,37 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const [erroresCampos, setErroresCampos] = useState<Record<string, string>>({});
   const [usuarioRegistrado, setUsuarioRegistrado] = useState<UsuarioCreado | null>(null);
+  useEffect(() => {
+    if (isAuthenticated && user?.email) {
+      fetch(`${apiBaseUrl}/auth/sync-oauth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          nombre: user.name || user.nickname || 'Usuario Google',
+          avatar: user.picture || null,
+          providerId: user.sub || null,
+        }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('Error al sincronizar con el servidor');
+          return res.json();
+        })
+        .then((data) => {
+          console.log('Usuario OAuth sincronizado en PostgreSQL:', data);
+          if (onSuccess && data?.id) {
+            onSuccess({
+              id: data.id,
+              nombre: data.nombre,
+              correo_electronico: data.email,
+              rol: data.rol,
+              fechaCreacion: data.createdAt,
+            });
+          }
+        })
+        .catch((err) => console.error('Error al sincronizar:', err));
+    }
+  }, [isAuthenticated, user, apiBaseUrl, onSuccess]);
 
   const sanearInputs = () => {
     return {
@@ -46,6 +76,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       contrasenaLimpia: contrasena,
     };
   };
+
+
 
   const validarFormulario = (): boolean => {
     const { nombreSaneado, emailSaneado, contrasenaLimpia } = sanearInputs();
@@ -154,7 +186,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           <div className="clean-success-badge">✓</div>
           <h2 className="auth-clean-title">¡Cuenta Creada!</h2>
           <p className="auth-clean-subtitle">
-            Tu registro ha sido procesado exitosamente y almacenado con cifrado seguro.
+            Tu registro ha sido procesado exitosamente.
           </p>
 
           <div className="clean-details-list">
@@ -247,123 +279,12 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     );
   }
 
-  // 1. PANTALLA TIPO AUTH0 (Sign up / Iniciar Sesión)
-  if (!mostrarFormulario) {
-    return (
-      <div className="auth-clean-wrapper" id="auth-welcome-card" style={{ maxWidth: 420, padding: '2.5rem 2rem' }}>
-        <h2 style={{ fontSize: '1.85rem', fontWeight: 700, textAlign: 'center', marginBottom: '1.75rem', color: '#111827', letterSpacing: '-0.02em' }}>
-          Iniciar Sesión
-        </h2>
-
-        {/* Campo Email */}
-        <div style={{ marginBottom: '1.25rem', textAlign: 'left' }}>
-          <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.45rem', color: '#374151' }}>
-            Email
-          </label>
-          <input
-            type="email"
-            placeholder="nombre@ejemplo.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="auth-clean-input"
-            id="auth-input-email"
-          />
-        </div>
-
-        {/* Botón azul principal 'Continuar' */}
-        <button
-          type="button"
-          onClick={() => loginWithRedirect({ authorizationParams: email ? { login_hint: email } : undefined })}
-          style={{
-            width: '100%',
-            background: '#2563eb',
-            color: '#ffffff',
-            padding: '0.8rem',
-            borderRadius: '6px',
-            border: 'none',
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontSize: '0.95rem',
-            transition: 'background 0.2s ease',
-            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-          }}
-          id="btn-continue-email"
-        >
-          Continuar
-        </button>
-
-        {/* Divisor 'OR' */}
-        <div className="auth-clean-divider" style={{ margin: '1.5rem 0' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#9ca3af' }}>OR</span>
-        </div>
-
-        {/* Botón Google */}
-        <button
-          type="button"
-          onClick={() => loginWithRedirect({ authorizationParams: { connection: 'google-oauth2' } })}
-          className="auth-google-btn"
-          id="btn-login-google"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24">
-            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z"/>
-            <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        {/* Link para registrarse manualmente */}
-        <div style={{ textAlign: 'center', marginTop: '1.75rem', fontSize: '0.875rem', color: '#6b7280' }}>
-          ¿No tienes una cuenta?{' '}
-          <button
-            type="button"
-            onClick={() => setMostrarFormulario(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#2563eb',
-              fontWeight: 600,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0
-            }}
-            id="btn-register-manual"
-          >
-            Regístrate manualmente
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // 2. PANTALLA DE FORMULARIO DE REGISTRO
   return (
     <div className="auth-clean-wrapper" id="register-form-card">
-      <button
-        type="button"
-        onClick={() => setMostrarFormulario(false)}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: '#6b7280',
-          cursor: 'pointer',
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          marginBottom: '1rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.4rem',
-          padding: 0
-        }}
-      >
-        ← Volver a opciones
-      </button>
-
       <div className="auth-clean-header">
         <h2 className="auth-clean-title">Crear Cuenta</h2>
         <p className="auth-clean-subtitle">
-          Completa tus datos para crear tu cuenta de calzado
+          Completa tus datos para comprar o inicia sesión con Google
         </p>
       </div>
 
@@ -497,6 +418,25 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
           {cargando ? 'Registrando...' : 'Registrarse'}
         </button>
 
+        <div className="auth-clean-divider">
+          <span>o continúa con</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => loginWithRedirect()}
+          className="auth-google-btn"
+          id="btn-login-google"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.36 24 12 24z" />
+            <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+          </svg>
+          Ingresar con Google
+        </button>
+
         <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
           ¿Ya tienes cuenta?{' '}
           <button
@@ -512,10 +452,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               padding: 0
             }}
           >
-            Iniciar Sesión
+            Iniciar Sesión con Auth0
           </button>
         </div>
       </form>
     </div>
+
   );
 };
