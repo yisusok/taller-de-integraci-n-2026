@@ -1,4 +1,4 @@
-# ADR-003: Autenticación Local, Saneamiento de Entradas y Manejo de Errores (AUTH-02)
+# ADR-004: Autenticación Local, Saneamiento de Entradas y Manejo de Errores (AUTH-02)
 
 * **Fecha:** 2026-10-21
 * **Estado:** Aceptado
