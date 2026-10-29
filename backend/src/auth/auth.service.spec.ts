@@ -1,6 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DeepPartial, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -8,8 +13,6 @@ import { AuthService } from './auth.service';
 import { User, RolUsuario } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
 import { MailService } from '../mail/mail.service';
 
 describe('AuthService', () => {
@@ -25,7 +28,9 @@ describe('AuthService', () => {
     };
 
     mailService = {
-      sendPasswordResetEmail: jest.fn().mockResolvedValue({ previewUrl: 'https://ethereal.email/message/mock' }),
+      sendPasswordResetEmail: jest.fn().mockResolvedValue({
+        previewUrl: 'https://ethereal.email/message/mock',
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -55,7 +60,12 @@ describe('AuthService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
       (repository.create as jest.Mock).mockImplementation(
         (data: DeepPartial<User>) =>
-          ({ id: 'uuid-1234', ...data, createdAt: new Date(), updatedAt: new Date() }) as User,
+          ({
+            id: 'uuid-1234',
+            ...data,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }) as User,
       );
       (repository.save as jest.Mock).mockImplementation((user: User) =>
         Promise.resolve(user),
@@ -73,7 +83,10 @@ describe('AuthService', () => {
 
       expect(createArg.authProvider).toBe('local');
 
-      const isHashValid = await bcrypt.compare('Password123!', createArg.password_hash as string);
+      const isHashValid = await bcrypt.compare(
+        'Password123!',
+        createArg.password_hash as string,
+      );
       expect(isHashValid).toBe(true);
 
       const resultObj = result as unknown as Record<string, unknown>;
@@ -81,7 +94,10 @@ describe('AuthService', () => {
     });
 
     it('lanza ConflictException si el email ya existe', async () => {
-      (repository.findOne as jest.Mock).mockResolvedValue({ id: 'existing', email: 'juan.perez@example.com' });
+      (repository.findOne as jest.Mock).mockResolvedValue({
+        id: 'existing',
+        email: 'juan.perez@example.com',
+      });
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
       expect(repository.save).not.toHaveBeenCalled();
@@ -89,7 +105,9 @@ describe('AuthService', () => {
 
     it('lanza ConflictException si la BD devuelve error 23505 (unique constraint)', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
-      (repository.create as jest.Mock).mockImplementation((data: DeepPartial<User>) => data as User);
+      (repository.create as jest.Mock).mockImplementation(
+        (data: DeepPartial<User>) => data as User,
+      );
       (repository.save as jest.Mock).mockRejectedValue({ code: '23505' });
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
@@ -112,11 +130,18 @@ describe('AuthService', () => {
 
       (repository.findOne as jest.Mock).mockResolvedValue(user);
 
-      const result = await service.login({ email: ' JUAN@EXAMPLE.COM ', password: 'Password123!' });
+      const result = await service.login({
+        email: ' JUAN@EXAMPLE.COM ',
+        password: 'Password123!',
+      });
 
-      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'juan@example.com' } });
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { email: 'juan@example.com' },
+      });
       expect(result.user.id).toBe('uuid-1234');
-      expect((result.user as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+      expect(
+        (result.user as unknown as Record<string, unknown>).password_hash,
+      ).toBeUndefined();
       expect(result.message).toBe('Inicio de sesión exitoso');
     });
 
@@ -124,7 +149,10 @@ describe('AuthService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        service.login({ email: 'noexiste@example.com', password: 'Password123!' }),
+        service.login({
+          email: 'noexiste@example.com',
+          password: 'Password123!',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -144,7 +172,10 @@ describe('AuthService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(user);
 
       await expect(
-        service.login({ email: 'juan@example.com', password: 'ClaveIncorrecta!' }),
+        service.login({
+          email: 'juan@example.com',
+          password: 'ClaveIncorrecta!',
+        }),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -170,12 +201,18 @@ describe('AuthService', () => {
 
   describe('findByEmail()', () => {
     it('busca un usuario por email normalizado', async () => {
-      const mockUser = { id: 'uuid-1', email: 'atleta@gym.com', authProvider: 'auth0' } as User;
+      const mockUser = {
+        id: 'uuid-1',
+        email: 'atleta@gym.com',
+        authProvider: 'auth0',
+      } as User;
       (repository.findOne as jest.Mock).mockResolvedValue(mockUser);
 
       const found = await service.findByEmail('  ATLETA@GYM.COM  ');
 
-      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'atleta@gym.com' } });
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { email: 'atleta@gym.com' },
+      });
       expect(found).toEqual(mockUser);
     });
   });
@@ -190,13 +227,18 @@ describe('AuthService', () => {
 
     it('crea y sincroniza un nuevo usuario con cuenta de Google (nombre, avatar e email)', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
-      (repository.create as jest.Mock).mockImplementation((data: DeepPartial<User>) => ({
-        id: 'uuid-google-1',
-        ...data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }) as User);
-      (repository.save as jest.Mock).mockImplementation((u: User) => Promise.resolve(u));
+      (repository.create as jest.Mock).mockImplementation(
+        (data: DeepPartial<User>) =>
+          ({
+            id: 'uuid-google-1',
+            ...data,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }) as User,
+      );
+      (repository.save as jest.Mock).mockImplementation((u: User) =>
+        Promise.resolve(u),
+      );
 
       const result = await service.syncOauth(dto);
 
@@ -218,8 +260,12 @@ describe('AuthService', () => {
       expect(result.id).toBe('uuid-google-1');
       expect(result.email).toBe('usuario.google@example.com');
       expect(result.nombre).toBe('Google User');
-      expect(result.avatar).toBe('https://lh3.googleusercontent.com/a/photo123');
-      expect((result as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+      expect(result.avatar).toBe(
+        'https://lh3.googleusercontent.com/a/photo123',
+      );
+      expect(
+        (result as unknown as Record<string, unknown>).password_hash,
+      ).toBeUndefined();
     });
 
     it('actualiza nombre y avatar sin alterar el email persistido si el usuario ya existe', async () => {
@@ -237,7 +283,9 @@ describe('AuthService', () => {
       };
 
       (repository.findOne as jest.Mock).mockResolvedValue({ ...existingUser });
-      (repository.save as jest.Mock).mockImplementation((u: User) => Promise.resolve(u));
+      (repository.save as jest.Mock).mockImplementation((u: User) =>
+        Promise.resolve(u),
+      );
 
       const updateDto: SyncOauthDto = {
         email: 'usuario.google@example.com',
@@ -250,7 +298,7 @@ describe('AuthService', () => {
 
       expect(repository.create).not.toHaveBeenCalled();
 
-      const savedUser = (repository.save as jest.Mock).mock.calls[0][0] as User;
+      const savedUser = ((repository.save as jest.Mock).mock.calls as unknown[][])[0][0] as User;
       expect(savedUser.email).toBe('usuario.google@example.com');
       expect(savedUser.nombre).toBe('Nombre Actualizado Desde Google');
       expect(savedUser.avatar).toBe('https://new-avatar.com/new.png');
@@ -258,15 +306,19 @@ describe('AuthService', () => {
 
       expect(result.nombre).toBe('Nombre Actualizado Desde Google');
       expect(result.avatar).toBe('https://new-avatar.com/new.png');
-      expect((result as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+      expect(
+        (result as unknown as Record<string, unknown>).password_hash,
+      ).toBeUndefined();
     });
 
     it('lanza InternalServerErrorException si la persistencia falla', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
-      (repository.create as jest.Mock).mockReturnValue({} as User);
+      (repository.create as jest.Mock).mockReturnValue({});
       (repository.save as jest.Mock).mockRejectedValue(new Error('DB error'));
 
-      await expect(service.syncOauth(dto)).rejects.toThrow(InternalServerErrorException);
+      await expect(service.syncOauth(dto)).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
   });
 
@@ -284,14 +336,20 @@ describe('AuthService', () => {
       };
 
       (repository.findOne as jest.Mock).mockResolvedValue({ ...mockUser });
-      (repository.save as jest.Mock).mockImplementation((u: User) => Promise.resolve(u));
+      (repository.save as jest.Mock).mockImplementation((u: User) =>
+        Promise.resolve(u),
+      );
 
-      const result = await service.forgotPassword({ email: '  RECUPERAR@EXAMPLE.COM  ' });
+      const result = await service.forgotPassword({
+        email: '  RECUPERAR@EXAMPLE.COM  ',
+      });
 
-      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'recuperar@example.com' } });
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { email: 'recuperar@example.com' },
+      });
       expect(repository.save).toHaveBeenCalled();
 
-      const savedUser = (repository.save as jest.Mock).mock.calls[0][0] as User;
+      const savedUser = ((repository.save as jest.Mock).mock.calls as unknown[][])[0][0] as User;
       expect(savedUser.resetPasswordToken).toBeDefined();
       expect(typeof savedUser.resetPasswordToken).toBe('string');
       // Hash SHA-256 en hexadecimal tiene exactamente 64 caracteres
@@ -303,25 +361,36 @@ describe('AuthService', () => {
         'recuperar@example.com',
         expect.stringMatching(/^[a-f0-9]{64}$/),
       );
-      expect(result.message).toBe('Si el correo está registrado, se enviará un enlace de recuperación.');
+      expect(result.message).toBe(
+        'Si el correo está registrado, se enviará un enlace de recuperación.',
+      );
     });
 
     it('devuelve mensaje sin error ni persistencia si el usuario no existe (evita enumeración)', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
 
-      const result = await service.forgotPassword({ email: 'noexiste@example.com' });
+      const result = await service.forgotPassword({
+        email: 'noexiste@example.com',
+      });
 
-      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'noexiste@example.com' } });
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { email: 'noexiste@example.com' },
+      });
       expect(repository.save).not.toHaveBeenCalled();
       expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
-      expect(result.message).toBe('Si el correo está registrado, se enviará un enlace de recuperación.');
+      expect(result.message).toBe(
+        'Si el correo está registrado, se enviará un enlace de recuperación.',
+      );
     });
   });
 
   describe('resetPassword()', () => {
     it('valida el hash SHA-256 del token, actualiza la contraseña e invalida el token temporal', async () => {
       const rawToken = 'valid-token-12345';
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(rawToken)
+        .digest('hex');
 
       const existingUser: User = {
         id: 'uuid-1',
@@ -337,7 +406,9 @@ describe('AuthService', () => {
       };
 
       (repository.findOne as jest.Mock).mockResolvedValue({ ...existingUser });
-      (repository.save as jest.Mock).mockImplementation((u: User) => Promise.resolve(u));
+      (repository.save as jest.Mock).mockImplementation((u: User) =>
+        Promise.resolve(u),
+      );
 
       const result = await service.resetPassword({
         token: rawToken,
@@ -348,10 +419,13 @@ describe('AuthService', () => {
         where: { resetPasswordToken: tokenHash },
       });
 
-      const savedUser = (repository.save as jest.Mock).mock.calls[0][0] as User;
+      const savedUser = ((repository.save as jest.Mock).mock.calls as unknown[][])[0][0] as User;
       expect(savedUser.resetPasswordToken).toBeNull();
       expect(savedUser.resetPasswordExpires).toBeNull();
-      const isNewHashValid = await bcrypt.compare('NewPassword123!', savedUser.password_hash as string);
+      const isNewHashValid = await bcrypt.compare(
+        'NewPassword123!',
+        savedUser.password_hash as string,
+      );
       expect(isNewHashValid).toBe(true);
 
       expect(result.message).toContain('Contraseña actualizada exitosamente');
@@ -361,13 +435,19 @@ describe('AuthService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
 
       await expect(
-        service.resetPassword({ token: 'token-inexistente', newPassword: 'NewPassword123!' }),
+        service.resetPassword({
+          token: 'token-inexistente',
+          newPassword: 'NewPassword123!',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('lanza BadRequestException si el token ha expirado', async () => {
       const rawToken = 'expired-token';
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(rawToken)
+        .digest('hex');
 
       const expiredUser: User = {
         id: 'uuid-1',
@@ -385,7 +465,10 @@ describe('AuthService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(expiredUser);
 
       await expect(
-        service.resetPassword({ token: rawToken, newPassword: 'NewPassword123!' }),
+        service.resetPassword({
+          token: rawToken,
+          newPassword: 'NewPassword123!',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
   });

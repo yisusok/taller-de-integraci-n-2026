@@ -17,7 +17,9 @@ describe('MailService', () => {
     (nodemailer.createTransport as jest.Mock) = jest.fn().mockReturnValue({
       sendMail: mockSendMail,
     });
-    (nodemailer.getTestMessageUrl as jest.Mock) = jest.fn().mockReturnValue('https://ethereal.email/message/test');
+    (nodemailer.getTestMessageUrl as jest.Mock) = jest
+      .fn()
+      .mockReturnValue('https://ethereal.email/message/test');
 
     process.env.SMTP_HOST = 'smtp.example.com';
     process.env.SMTP_PORT = '587';
@@ -47,7 +49,10 @@ describe('MailService', () => {
   });
 
   it('sendPasswordResetEmail() envía un correo con el enlace de recuperación y token', async () => {
-    const result = await service.sendPasswordResetEmail('usuario@example.com', 'token-abc-123');
+    const result = await service.sendPasswordResetEmail(
+      'usuario@example.com',
+      'token-abc-123',
+    );
 
     expect(nodemailer.createTransport).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -64,6 +69,7 @@ describe('MailService', () => {
       expect.objectContaining({
         to: 'usuario@example.com',
         subject: 'Recuperación de contraseña — E-Commerce',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         html: expect.stringContaining('/reset-password?token=token-abc-123'),
       }),
     );

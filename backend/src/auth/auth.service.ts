@@ -25,7 +25,7 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto): Promise<PublicUser> {
     const existing = await this.userRepository.findOne({
@@ -48,8 +48,9 @@ export class AuthService {
 
     try {
       const saved = await this.userRepository.save(user);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password_hash: _, ...publicUser } = saved;
-      return publicUser as PublicUser;
+      return publicUser;
     } catch (error: unknown) {
       const dbError = error as { code?: string };
       if (dbError?.code === '23505') {
@@ -66,17 +67,29 @@ export class AuthService {
     });
 
     if (!user || !user.password_hash) {
-      throw new UnauthorizedException('Correo electrónico o contraseña incorrectos');
+      throw new UnauthorizedException(
+        'Correo electrónico o contraseña incorrectos',
+      );
     }
 
     const isMatch = await bcrypt.compare(dto.password, user.password_hash);
     if (!isMatch) {
-      throw new UnauthorizedException('Correo electrónico o contraseña incorrectos');
+      throw new UnauthorizedException(
+        'Correo electrónico o contraseña incorrectos',
+      );
     }
 
-    const { password_hash: _, resetPasswordToken: __, resetPasswordExpires: ___, ...publicUser } = user;
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      password_hash: _pw,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      resetPasswordToken: _rpt,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      resetPasswordExpires: _rpe,
+      ...publicUser
+    } = user;
     return {
-      user: publicUser as PublicUser,
+      user: publicUser,
       message: 'Inicio de sesión exitoso',
     };
   }
@@ -116,54 +129,77 @@ export class AuthService {
 
     try {
       const saved = await this.userRepository.save(user);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password_hash: _, ...publicUser } = saved;
-      return publicUser as PublicUser;
-    } catch (error: unknown) {
-      throw new InternalServerErrorException('Error al sincronizar el usuario OAuth');
+      return publicUser;
+    } catch {
+      throw new InternalServerErrorException(
+        'Error al sincronizar el usuario OAuth',
+      );
     }
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const emailLimpio = dto.email.trim().toLowerCase();
-    const user = await this.userRepository.findOne({ where: { email: emailLimpio } });
+    const user = await this.userRepository.findOne({
+      where: { email: emailLimpio },
+    });
 
     if (!user) {
-      return { message: 'Si el correo está registrado, se enviará un enlace de recuperación.' };
+      return {
+        message:
+          'Si el correo está registrado, se enviará un enlace de recuperación.',
+      };
     }
 
     // Token criptográfico plano para el enlace del correo
     const rawToken = crypto.randomBytes(32).toString('hex');
 
     // Hash SHA-256 para almacenamiento seguro en BD (estándar OWASP contra fuga de tokens en dumps)
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const tokenHash = crypto
+      .createHash('sha256')
+      .update(rawToken)
+      .digest('hex');
 
     user.resetPasswordToken = tokenHash;
     user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
     await this.userRepository.save(user);
 
     // Enviar correo real con el token plano
-    const mailResult = await this.mailService.sendPasswordResetEmail(user.email, rawToken);
+    const mailResult = await this.mailService.sendPasswordResetEmail(
+      user.email,
+      rawToken,
+    );
 
     return {
-      message: 'Si el correo está registrado, se enviará un enlace de recuperación.',
-      ...(process.env.NODE_ENV !== 'production' && mailResult.previewUrl && { previewUrl: mailResult.previewUrl }),
+      message:
+        'Si el correo está registrado, se enviará un enlace de recuperación.',
+      ...(process.env.NODE_ENV !== 'production' &&
+        mailResult.previewUrl && { previewUrl: mailResult.previewUrl }),
     };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
     // Hashear el token recibido antes de buscar en la BD
-    const incomingTokenHash = crypto.createHash('sha256').update(dto.token.trim()).digest('hex');
+    const incomingTokenHash = crypto
+      .createHash('sha256')
+      .update(dto.token.trim())
+      .digest('hex');
 
     const user = await this.userRepository.findOne({
       where: { resetPasswordToken: incomingTokenHash },
     });
 
     if (!user || !user.resetPasswordExpires) {
-      throw new BadRequestException('El token de recuperación es inválido o no existe.');
+      throw new BadRequestException(
+        'El token de recuperación es inválido o no existe.',
+      );
     }
 
     if (user.resetPasswordExpires < new Date()) {
-      throw new BadRequestException('El token de recuperación ha expirado. Solicita uno nuevo.');
+      throw new BadRequestException(
+        'El token de recuperación ha expirado. Solicita uno nuevo.',
+      );
     }
 
     user.password_hash = await bcrypt.hash(dto.newPassword, 10);
@@ -173,7 +209,8 @@ export class AuthService {
     user.resetPasswordExpires = null;
     await this.userRepository.save(user);
 
-    return { message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.' };
+    return {
+      message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.',
+    };
   }
-
 }
