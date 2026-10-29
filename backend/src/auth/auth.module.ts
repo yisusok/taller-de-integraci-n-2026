@@ -21,7 +21,8 @@ import { MailModule } from '../mail/mail.module';
           config.get<string>('JWT_SECRET') ||
           'jwt_super_secret_development_key_2026',
         signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES_IN', '8h'),
+          expiresIn: (config.get<string>('JWT_EXPIRES_IN') || '8h') as
+            number | `${number}h` | `${number}d` | `${number}m`,
         },
       }),
     }),
