@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { DeepPartial, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -93,6 +93,78 @@ describe('AuthService', () => {
       (repository.save as jest.Mock).mockRejectedValue({ code: '23505' });
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('login()', () => {
+    it('autentica credenciales correctas y retorna PublicUser', async () => {
+      const passwordHash = await bcrypt.hash('Password123!', 10);
+      const user: User = {
+        id: 'uuid-1234',
+        email: 'juan@example.com',
+        nombre: 'Juan',
+        password_hash: passwordHash,
+        rol: RolUsuario.CLIENTE,
+        authProvider: 'local',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (repository.findOne as jest.Mock).mockResolvedValue(user);
+
+      const result = await service.login({ email: ' JUAN@EXAMPLE.COM ', password: 'Password123!' });
+
+      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'juan@example.com' } });
+      expect(result.user.id).toBe('uuid-1234');
+      expect((result.user as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+      expect(result.message).toBe('Inicio de sesión exitoso');
+    });
+
+    it('lanza UnauthorizedException si el usuario no existe', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.login({ email: 'noexiste@example.com', password: 'Password123!' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('lanza UnauthorizedException si la contraseña no coincide', async () => {
+      const passwordHash = await bcrypt.hash('Password123!', 10);
+      const user: User = {
+        id: 'uuid-1234',
+        email: 'juan@example.com',
+        nombre: 'Juan',
+        password_hash: passwordHash,
+        rol: RolUsuario.CLIENTE,
+        authProvider: 'local',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (repository.findOne as jest.Mock).mockResolvedValue(user);
+
+      await expect(
+        service.login({ email: 'juan@example.com', password: 'ClaveIncorrecta!' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('lanza UnauthorizedException si el usuario es de OAuth y no tiene password_hash', async () => {
+      const user: User = {
+        id: 'uuid-1234',
+        email: 'oauth@example.com',
+        nombre: 'OAuth User',
+        password_hash: null,
+        rol: RolUsuario.CLIENTE,
+        authProvider: 'google',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (repository.findOne as jest.Mock).mockResolvedValue(user);
+
+      await expect(
+        service.login({ email: 'oauth@example.com', password: 'Password123!' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

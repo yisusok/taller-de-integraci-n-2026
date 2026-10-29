@@ -4,8 +4,14 @@ import './App.css'
 import { LoginForm } from './components/Login/LoginForm'
 import { RegisterForm } from './components/Register/RegisterForm'
 import { ResetPasswordForm } from './components/ResetPassword/ResetPasswordForm'
-import { Profile } from './components/Profile/Profile'
-import { LoginButton } from './components/Login/Login'
+
+interface UserSession {
+  id?: string
+  nombre: string
+  email: string
+  rol?: string
+  avatar?: string | null
+}
 
 const getInitialState = () => {
   if (typeof window === 'undefined') {
@@ -82,6 +88,30 @@ export default function App() {
   const [resetToken, setResetToken] = useState<string>(initial.token)
   const [registeredUsersCount, setRegisteredUsersCount] = useState(0)
 
+  // Sesión local (email y password)
+  const [localUser, setLocalUser] = useState<UserSession | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('local_user')
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch {
+          return null
+        }
+      }
+    }
+    return null
+  })
+
+  // Usuario activo unificado (OAuth o Local)
+  const activeUser: UserSession | null = localUser || (isAuthenticated && user ? {
+    id: user.sub,
+    nombre: user.name || user.nickname || 'Usuario Google',
+    email: user.email || '',
+    avatar: user.picture || null,
+    rol: 'cliente',
+  } : null)
+
   // Estados del catálogo y carrito
   const [cartCount, setCartCount] = useState(0)
   const [selectedVariants, setSelectedVariants] = useState<
@@ -135,6 +165,24 @@ export default function App() {
     setCartCount((c) => c + 1)
   }
 
+  const handleLogout = () => {
+    setLocalUser(null)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('local_user')
+    }
+    if (isAuthenticated) {
+      logout({ logoutParams: { returnTo: window.location.origin } })
+    }
+  }
+
+  const handleLoginSuccess = (user: UserSession) => {
+    setLocalUser(user)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('local_user', JSON.stringify(user))
+    }
+    setActiveTab('store')
+  }
+
   return (
     <div className="store-container">
       {/* Navbar Unificada */}
@@ -169,10 +217,35 @@ export default function App() {
             🛒 Carrito <span className="cart-badge">{cartCount}</span>
           </button>
 
-          {isAuthenticated ? (
+          {activeUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Profile />
-              <LoginButton />
+              <span
+                style={{
+                  fontSize: '0.85rem',
+                  color: '#a5b4fc',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+                onClick={() => setActiveTab('login')}
+              >
+                👤 {activeUser.nombre.split(' ')[0]}
+              </span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{
+                  background: 'none',
+                  border: '1px solid #374151',
+                  color: '#9ca3af',
+                  padding: '0.3rem 0.6rem',
+                  borderRadius: '4px',
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Salir
+              </button>
             </div>
           ) : (
             <button
@@ -256,7 +329,7 @@ export default function App() {
       {/* Vistas de Autenticación y Perfil */}
       {activeTab !== 'store' && (
         <div style={{ margin: '2rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {isAuthenticated && user ? (
+          {activeUser ? (
             <div className="auth-clean-wrapper" id="profile-card">
               <div className="auth-clean-header" style={{ marginBottom: '1.5rem' }}>
                 <span
@@ -270,10 +343,10 @@ export default function App() {
               </div>
 
               <div className="auth-profile-box">
-                {user.picture ? (
+                {activeUser.avatar ? (
                   <img
-                    src={user.picture}
-                    alt={user.name || 'Usuario'}
+                    src={activeUser.avatar}
+                    alt={activeUser.nombre}
                     className="auth-profile-avatar"
                   />
                 ) : (
@@ -291,8 +364,13 @@ export default function App() {
                   </div>
                 )}
                 <div>
-                  <h3 className="auth-profile-name">{user.name || 'Usuario'}</h3>
-                  <p className="auth-profile-email">{user.email}</p>
+                  <h3 className="auth-profile-name">{activeUser.nombre}</h3>
+                  <p className="auth-profile-email">{activeUser.email}</p>
+                  {activeUser.rol && (
+                    <span style={{ fontSize: '0.75rem', color: '#4f46e5', fontWeight: 700, textTransform: 'uppercase' }}>
+                      Rol: {activeUser.rol}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -307,7 +385,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+                  onClick={handleLogout}
                   className="clean-submit-btn"
                   style={{ background: '#111827' }}
                 >
@@ -321,6 +399,7 @@ export default function App() {
                 <LoginForm
                   onGoToRegister={() => setActiveTab('register')}
                   onForgotPassword={() => setActiveTab('forgot-password')}
+                  onSuccess={handleLoginSuccess}
                 />
               )}
 

@@ -2,6 +2,7 @@ import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService, PublicUser } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -15,6 +16,13 @@ export class AuthController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   register(@Body() dto: RegisterDto): Promise<PublicUser> {
     return this.authService.register(dto);
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
   @Post('sync-oauth')

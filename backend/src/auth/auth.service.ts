@@ -3,17 +3,20 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User, RolUsuario } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
 import * as crypto from 'crypto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { MailService } from '../mail/mail.service';
+
 export type PublicUser = Omit<User, 'password_hash'>;
 
 @Injectable()
@@ -54,6 +57,28 @@ export class AuthService {
       }
       throw new InternalServerErrorException('Error al registrar el usuario');
     }
+  }
+
+  async login(dto: LoginDto): Promise<{ user: PublicUser; message: string }> {
+    const emailLimpio = dto.email.trim().toLowerCase();
+    const user = await this.userRepository.findOne({
+      where: { email: emailLimpio },
+    });
+
+    if (!user || !user.password_hash) {
+      throw new UnauthorizedException('Correo electrónico o contraseña incorrectos');
+    }
+
+    const isMatch = await bcrypt.compare(dto.password, user.password_hash);
+    if (!isMatch) {
+      throw new UnauthorizedException('Correo electrónico o contraseña incorrectos');
+    }
+
+    const { password_hash: _, resetPasswordToken: __, resetPasswordExpires: ___, ...publicUser } = user;
+    return {
+      user: publicUser as PublicUser,
+      message: 'Inicio de sesión exitoso',
+    };
   }
 
   async findByEmail(email: string): Promise<User | null> {

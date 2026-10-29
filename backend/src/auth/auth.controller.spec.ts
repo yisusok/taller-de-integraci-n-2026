@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { AuthController } from './auth.controller';
 import { AuthService, PublicUser } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -27,6 +28,7 @@ describe('AuthController', () => {
   beforeEach(async () => {
     authService = {
       register: jest.fn().mockResolvedValue(mockUser),
+      login: jest.fn().mockResolvedValue({ user: mockUser, message: 'Inicio de sesión exitoso' }),
       syncOauth: jest.fn().mockResolvedValue({
         ...mockUser,
         authProvider: 'google',
@@ -66,6 +68,19 @@ describe('AuthController', () => {
     expect(result.id).toBe('uuid-1234');
     expect(result.email).toBe('carlos@example.com');
     expect((result as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+  });
+
+  it('POST /api/auth/login → autentica un usuario y devuelve sesión', async () => {
+    const dto: LoginDto = {
+      email: 'carlos@example.com',
+      password: 'SuperSecret1!',
+    };
+
+    const result = await controller.login(dto);
+
+    expect(authService.login).toHaveBeenCalledWith(dto);
+    expect(result.user.id).toBe('uuid-1234');
+    expect(result.message).toBe('Inicio de sesión exitoso');
   });
 
   it('POST /api/auth/sync-oauth → sincroniza cuenta Google OAuth y devuelve PublicUser', async () => {

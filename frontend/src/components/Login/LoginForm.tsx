@@ -1,17 +1,78 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import '../Register/RegisterForm.css';
 
-interface LoginFormProps {
-  onGoToRegister: () => void;
-  onForgotPassword: () => void;
+interface PublicUser {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: string;
+  avatar?: string | null;
 }
 
+interface LoginFormProps {
+  apiBaseUrl?: string;
+  onGoToRegister: () => void;
+  onForgotPassword: () => void;
+  onSuccess?: (user: PublicUser) => void;
+}
+
+const defaultApiUrl =
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/api\/?$/, '') ||
+  'http://localhost:3000';
+
 export const LoginForm: React.FC<LoginFormProps> = ({
+  apiBaseUrl = defaultApiUrl,
   onGoToRegister,
   onForgotPassword,
+  onSuccess,
 }) => {
-  const { loginWithRedirect, isLoading } = useAuth0();
+  const { loginWithRedirect, isLoading: auth0Loading } = useAuth0();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [mostrarPassword, setMostrarPassword] = useState(false);
+  const [cargando, setCargando] = useState(false);
+  const [errorServidor, setErrorServidor] = useState<string | null>(null);
+
+  const handleLocalLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrorServidor(null);
+
+    const emailLimpio = email.trim().toLowerCase();
+    if (!emailLimpio || !password) {
+      setErrorServidor('Por favor completa todos los campos.');
+      return;
+    }
+
+    setCargando(true);
+
+    try {
+      const res = await fetch(`${apiBaseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailLimpio, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error('Demasiados intentos fallidos. Por favor espera unos minutos.');
+        }
+        const msg = Array.isArray(data.message) ? data.message.join('. ') : data.message;
+        throw new Error(msg || 'Credenciales incorrectas');
+      }
+
+      if (onSuccess && data?.user) {
+        onSuccess(data.user);
+      }
+    } catch (err: unknown) {
+      const e = err as Error;
+      setErrorServidor(e.message || 'Error al iniciar sesión.');
+    } finally {
+      setCargando(false);
+    }
+  };
 
   return (
     <div className="auth-clean-wrapper" id="login-form-card">
@@ -23,8 +84,94 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {/* Acceso directo con Google (omite pantalla intermedia de Auth0) */}
+      {errorServidor && (
+        <div className="clean-alert clean-alert-error" role="alert" style={{ marginBottom: '1rem' }}>
+          <div>
+            <strong>Error:</strong> {errorServidor}
+          </div>
+        </div>
+      )}
+
+      {/* Formulario de Login Local */}
+      <form onSubmit={handleLocalLogin} className="auth-clean-form" noValidate>
+        <div className="auth-clean-field">
+          <label className="auth-clean-label" htmlFor="login-input-email">
+            Correo Electrónico
+          </label>
+          <input
+            id="login-input-email"
+            type="email"
+            className="auth-clean-input"
+            placeholder="ejemplo@correo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={cargando}
+            required
+          />
+        </div>
+
+        <div className="auth-clean-field">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label className="auth-clean-label" htmlFor="login-input-password">
+              Contraseña
+            </label>
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              id="btn-login-forgot-password-link"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#4f46e5',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                textDecoration: 'underline',
+                padding: 0,
+              }}
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
+          </div>
+
+          <div className="auth-input-password-wrapper" style={{ position: 'relative' }}>
+            <input
+              id="login-input-password"
+              type={mostrarPassword ? 'text' : 'password'}
+              className="auth-clean-input"
+              placeholder="Tu contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={cargando}
+              required
+            />
+            <button
+              type="button"
+              className="clean-show-pass-btn"
+              onClick={() => setMostrarPassword(!mostrarPassword)}
+              tabIndex={-1}
+            >
+              {mostrarPassword ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          className="clean-submit-btn"
+          id="btn-login-submit"
+          disabled={cargando}
+          style={{ marginTop: '0.5rem' }}
+        >
+          {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
+        </button>
+      </form>
+
+      <div className="auth-clean-divider" style={{ margin: '1.25rem 0' }}>
+        <span>o continuar con</span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {/* Acceso directo con Google */}
         <button
           type="button"
           onClick={() =>
@@ -36,8 +183,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           }
           className="auth-google-btn"
           id="btn-login-google-direct"
-          disabled={isLoading}
-          style={{ padding: '0.85rem 1rem', fontSize: '0.95rem' }}
+          disabled={auth0Loading}
+          style={{ padding: '0.75rem 1rem', fontSize: '0.9rem' }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path
@@ -57,63 +204,28 @@ export const LoginForm: React.FC<LoginFormProps> = ({
               d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
             />
           </svg>
-          Continuar con Google
+          Google
         </button>
+      </div>
 
-        <div className="auth-clean-divider">
-          <span>o con correo y contraseña</span>
-        </div>
-
+      <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
+        ¿No tienes una cuenta aún?{' '}
         <button
           type="button"
-          onClick={() => loginWithRedirect()}
-          className="clean-submit-btn"
-          id="btn-login-auth0"
-          disabled={isLoading}
-          style={{ background: '#1f2937' }}
+          onClick={onGoToRegister}
+          id="btn-go-to-register"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#111827',
+            fontWeight: 700,
+            cursor: 'pointer',
+            textDecoration: 'underline',
+            padding: 0,
+          }}
         >
-          Iniciar sesión con Correo / Auth0
+          Regístrate aquí
         </button>
-
-        <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.875rem', color: '#6b7280' }}>
-          ¿No tienes una cuenta aún?{' '}
-          <button
-            type="button"
-            onClick={onGoToRegister}
-            id="btn-go-to-register"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#111827',
-              fontWeight: 700,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0,
-            }}
-          >
-            Regístrate aquí
-          </button>
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.85rem' }}>
-          <button
-            type="button"
-            onClick={onForgotPassword}
-            id="btn-login-forgot-password"
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#4f46e5',
-              fontWeight: 600,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              padding: 0,
-              fontSize: '0.85rem',
-            }}
-          >
-            ¿Olvidaste tu contraseña?
-          </button>
-        </div>
       </div>
     </div>
   );
