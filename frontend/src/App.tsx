@@ -4,6 +4,7 @@ import './App.css'
 import { LoginForm } from './components/Login/LoginForm'
 import { RegisterForm } from './components/Register/RegisterForm'
 import { ResetPasswordForm } from './components/ResetPassword/ResetPasswordForm'
+import { AddressBook } from './components/AddressBook/AddressBook'
 
 interface UserSession {
   id?: string
@@ -358,6 +359,23 @@ export default function App() {
 
           {activeUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button
+                type="button"
+                className="variant-btn"
+                onClick={() => {
+                  setAuthPromptMessage(null)
+                  setActiveTab('login')
+                }}
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  fontSize: '0.85rem',
+                  borderColor: activeTab === 'login' ? '#6366f1' : undefined,
+                  color: activeTab === 'login' ? '#818cf8' : undefined,
+                }}
+                title="Gestionar mi perfil y domicilios de envío"
+              >
+                📍 Mis Domicilios
+              </button>
               <span
                 style={{
                   fontSize: '0.85rem',
@@ -610,6 +628,9 @@ export default function App() {
                   )}
                 </div>
               </div>
+
+              {/* CRUD de Libreta de Direcciones (AUTH-06) */}
+              <AddressBook />
 
               <div style={{ marginTop: '2rem', display: 'flex', gap: '0.75rem' }}>
                 <button
