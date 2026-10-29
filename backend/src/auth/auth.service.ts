@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -24,6 +25,7 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly jwtService: JwtService,
     private readonly mailService: MailService,
   ) {}
 
@@ -60,7 +62,9 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<{ user: PublicUser; message: string }> {
+  async login(
+    dto: LoginDto,
+  ): Promise<{ user: PublicUser; access_token: string; message: string }> {
     const emailLimpio = dto.email.trim().toLowerCase();
     const user = await this.userRepository.findOne({
       where: { email: emailLimpio },
@@ -88,8 +92,13 @@ export class AuthService {
       resetPasswordExpires: _rpe,
       ...publicUser
     } = user;
+
+    const payload = { sub: user.id, email: user.email, rol: user.rol };
+    const access_token = this.jwtService.sign(payload);
+
     return {
       user: publicUser,
+      access_token,
       message: 'Inicio de sesión exitoso',
     };
   }
@@ -100,7 +109,9 @@ export class AuthService {
     });
   }
 
-  async syncOauth(dto: SyncOauthDto): Promise<PublicUser> {
+  async syncOauth(
+    dto: SyncOauthDto,
+  ): Promise<{ user: PublicUser; access_token: string }> {
     const emailLimpio = dto.email.trim().toLowerCase();
 
     let user = await this.userRepository.findOne({
@@ -131,7 +142,11 @@ export class AuthService {
       const saved = await this.userRepository.save(user);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password_hash: _, ...publicUser } = saved;
-      return publicUser;
+
+      const payload = { sub: saved.id, email: saved.email, rol: saved.rol };
+      const access_token = this.jwtService.sign(payload);
+
+      return { user: publicUser, access_token };
     } catch {
       throw new InternalServerErrorException(
         'Error al sincronizar el usuario OAuth',

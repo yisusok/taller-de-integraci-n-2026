@@ -25,7 +25,8 @@ const getInitialState = () => {
       | 'login'
       | 'register'
       | 'forgot-password'
-      | 'reset-password',
+      | 'reset-password'
+      | 'backoffice',
     token: token || '',
   }
 }
@@ -56,7 +57,7 @@ const SAMPLE_PRODUCTS: ProductItem[] = [
     categoria: 'Indumentaria',
     precioVenta: 24999,
     skuBase: 'REM-DRY-02',
-    talles: [1, 2, 3, 4], // Talles S, M, L, XL
+    talles: [1, 2, 3, 4],
     colores: ['Negro', 'Gris', 'Rojo'],
   },
   {
@@ -83,10 +84,11 @@ export default function App() {
   const { isAuthenticated, user, logout } = useAuth0()
   const initial = getInitialState()
   const [activeTab, setActiveTab] = useState<
-    'store' | 'login' | 'register' | 'forgot-password' | 'reset-password'
+    'store' | 'login' | 'register' | 'forgot-password' | 'reset-password' | 'backoffice'
   >(initial.tab)
   const [resetToken, setResetToken] = useState<string>(initial.token)
   const [registeredUsersCount, setRegisteredUsersCount] = useState(0)
+  const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null)
 
   // Sesión local (email y password)
   const [localUser, setLocalUser] = useState<UserSession | null>(() => {
@@ -112,11 +114,25 @@ export default function App() {
     rol: 'cliente',
   } : null)
 
-  // Estados del catálogo y carrito
+  // Estados del catálogo, carrito y favoritos
   const [cartCount, setCartCount] = useState(0)
   const [selectedVariants, setSelectedVariants] = useState<
     Record<string, { talle?: number; color?: string }>
   >({})
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('user_favorites')
+        return saved ? JSON.parse(saved) : []
+      } catch {
+        return []
+      }
+    }
+    return []
+  })
+
+  // Estado de movimientos para prueba de Backoffice
+  const [backofficeLog, setBackofficeLog] = useState<string | null>(null)
 
   // Sincronización automática de OAuth con el backend al iniciar sesión
   useEffect(() => {
@@ -140,6 +156,9 @@ export default function App() {
           return res.json()
         })
         .then((data) => {
+          if (data?.access_token) {
+            localStorage.setItem('access_token', data.access_token)
+          }
           console.log('Usuario OAuth sincronizado en PostgreSQL:', data)
         })
         .catch((err) => console.error('Error al sincronizar con backend:', err))
@@ -156,7 +175,18 @@ export default function App() {
     }))
   }
 
+  /**
+   * Middleware de Control de Acceso:
+   * Los visitantes anónimos pueden explorar el catálogo libremente,
+   * pero deben autenticarse para interactuar con el Carrito de compras.
+   */
   const handleAddToCart = (product: ProductItem) => {
+    if (!activeUser) {
+      setAuthPromptMessage('Debes iniciar sesión para agregar productos al carrito.')
+      setActiveTab('login')
+      return
+    }
+
     const variant = selectedVariants[product.id]
     if (!variant?.talle || !variant?.color) {
       alert(`Por favor, selecciona talle y color para ${product.nombre}`)
@@ -165,32 +195,120 @@ export default function App() {
     setCartCount((c) => c + 1)
   }
 
+  /**
+   * Middleware de Control de Acceso:
+   * La interacción con Favoritos está restringida a usuarios autenticados.
+   */
+  const handleToggleFavorite = (productId: string) => {
+    if (!activeUser) {
+      setAuthPromptMessage('Debes iniciar sesión para guardar productos en tus favoritos.')
+      setActiveTab('login')
+      return
+    }
+
+    setFavorites((prev) => {
+      const isFav = prev.includes(productId)
+      const updated = isFav ? prev.filter((id) => id !== productId) : [...prev, productId]
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user_favorites', JSON.stringify(updated))
+      }
+      return updated
+    })
+  }
+
+  const handleCartClick = () => {
+    if (!activeUser) {
+      setAuthPromptMessage('Debes iniciar sesión para acceder al carrito.')
+      setActiveTab('login')
+      return
+    }
+    alert(`Tienes ${cartCount} producto(s) en tu carrito.`)
+  }
+
   const handleLogout = () => {
     setLocalUser(null)
     if (typeof window !== 'undefined') {
       localStorage.removeItem('local_user')
+      localStorage.removeItem('access_token')
     }
     if (isAuthenticated) {
       logout({ logoutParams: { returnTo: window.location.origin } })
     }
+    setActiveTab('store')
   }
 
-  const handleLoginSuccess = (user: UserSession) => {
+  const handleLoginSuccess = (user: UserSession, token?: string) => {
     setLocalUser(user)
+    setAuthPromptMessage(null)
     if (typeof window !== 'undefined') {
       localStorage.setItem('local_user', JSON.stringify(user))
+      if (token) {
+        localStorage.setItem('access_token', token)
+      }
     }
     setActiveTab('store')
   }
 
+  const handleTestBackofficeAccess = async () => {
+    setBackofficeLog('Consultando API protegida /api/stock/movimientos...')
+    const defaultApiUrl =
+      (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/api\/?$/, '') ||
+      'http://localhost:3000'
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+
+    try {
+      const res = await fetch(`${defaultApiUrl}/stock/movimientos`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        setBackofficeLog(
+          `⛔ Acceso Denegado (HTTP ${res.status}): ${
+            errorData.message || 'No autorizado para rutas de backoffice.'
+          }`,
+        )
+      } else {
+        const data = await res.json()
+        setBackofficeLog(`✅ Acceso Autorizado (HTTP 200). Movimientos: ${data.length}`)
+      }
+    } catch {
+      setBackofficeLog('⛔ Error de conexión con el backend.')
+    }
+  }
+
   return (
     <div className="store-container">
+      {/* Alerta de Middleware de Control de Acceso */}
+      {authPromptMessage && activeTab === 'login' && (
+        <div
+          style={{
+            background: '#fef3c7',
+            border: '1px solid #f59e0b',
+            color: '#92400e',
+            padding: '0.85rem 1.25rem',
+            borderRadius: '8px',
+            margin: '1rem auto 0 auto',
+            maxWidth: '480px',
+            textAlign: 'center',
+            fontSize: '0.9rem',
+            fontWeight: 500,
+          }}
+        >
+          🔒 {authPromptMessage}
+        </div>
+      )}
+
       {/* Navbar Unificada */}
       <nav className="navbar">
         <div
           className="logo-group"
           style={{ cursor: 'pointer' }}
-          onClick={() => setActiveTab('store')}
+          onClick={() => {
+            setAuthPromptMessage(null)
+            setActiveTab('store')
+          }}
         >
           <span className="logo-icon">🛍️</span>
           <span className="logo-text">E-COMMERCE 2026</span>
@@ -201,19 +319,40 @@ export default function App() {
           )}
         </div>
 
-        <div className="nav-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div className="nav-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {activeTab !== 'store' && (
             <button
               type="button"
               className="variant-btn"
-              onClick={() => setActiveTab('store')}
+              onClick={() => {
+                setAuthPromptMessage(null)
+                setActiveTab('store')
+              }}
               style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
             >
               ← Ir a la Tienda
             </button>
           )}
 
-          <button className="cart-btn">
+          {/* Botón de acceso a Backoffice */}
+          <button
+            type="button"
+            className="variant-btn"
+            onClick={() => {
+              setAuthPromptMessage(null)
+              setActiveTab('backoffice')
+            }}
+            style={{
+              padding: '0.4rem 0.8rem',
+              fontSize: '0.85rem',
+              borderColor: activeTab === 'backoffice' ? '#6366f1' : undefined,
+              color: activeTab === 'backoffice' ? '#818cf8' : undefined,
+            }}
+          >
+            🛡️ Backoffice
+          </button>
+
+          <button className="cart-btn" onClick={handleCartClick}>
             🛒 Carrito <span className="cart-badge">{cartCount}</span>
           </button>
 
@@ -227,7 +366,10 @@ export default function App() {
                   cursor: 'pointer',
                   textDecoration: 'underline',
                 }}
-                onClick={() => setActiveTab('login')}
+                onClick={() => {
+                  setAuthPromptMessage(null)
+                  setActiveTab('login')
+                }}
               >
                 👤 {activeUser.nombre.split(' ')[0]}
               </span>
@@ -251,7 +393,10 @@ export default function App() {
             <button
               type="button"
               className="variant-btn active"
-              onClick={() => setActiveTab('login')}
+              onClick={() => {
+                setAuthPromptMessage(null)
+                setActiveTab('login')
+              }}
               style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem', fontWeight: 600 }}
             >
               Iniciar Sesión / Registro
@@ -260,19 +405,47 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Vista de Catálogo Principal (Storefront) */}
+      {/* Vista de Catálogo Principal (Storefront) - Navegación anónima permitida */}
       {activeTab === 'store' && (
         <>
           <header className="hero-banner">
             <h1>Catálogo de Temporada</h1>
-            <p>Selecciona tu producto y variante preferida para comprar.</p>
+            <p>
+              Explora nuestros productos libremente. Para comprar o guardar en favoritos, inicia sesión.
+            </p>
           </header>
 
           <main className="product-grid">
             {SAMPLE_PRODUCTS.map((prod) => {
               const currentVariant = selectedVariants[prod.id] || {}
+              const isFavorite = favorites.includes(prod.id)
+
               return (
-                <article key={prod.id} className="product-card">
+                <article key={prod.id} className="product-card" style={{ position: 'relative' }}>
+                  {/* Botón de Favoritos (Protegido por Middleware) */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFavorite(prod.id)}
+                    title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+                    style={{
+                      position: 'absolute',
+                      top: '1rem',
+                      right: '1rem',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '50%',
+                      width: '36px',
+                      height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      fontSize: '1.2rem',
+                    }}
+                  >
+                    {isFavorite ? '❤️' : '🤍'}
+                  </button>
+
                   <div className="product-category">{prod.categoria}</div>
                   <h2 className="product-title">{prod.nombre}</h2>
                   <div className="product-sku">SKU Base: {prod.skuBase}</div>
@@ -312,6 +485,7 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Botón Agregar al Carrito (Protegido por Middleware) */}
                   <button
                     type="button"
                     className="add-to-cart-btn"
@@ -326,8 +500,71 @@ export default function App() {
         </>
       )}
 
+      {/* Vista de Control de Acceso al Backoffice */}
+      {activeTab === 'backoffice' && (
+        <div style={{ margin: '2rem auto', maxWidth: '640px', padding: '0 1rem' }}>
+          <div className="auth-clean-wrapper">
+            <div className="auth-clean-header" style={{ marginBottom: '1.5rem' }}>
+              <span
+                className="auth-clean-tag"
+                style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
+              >
+                🛡️ Control de Acceso RBAC
+              </span>
+              <h2 className="auth-clean-title">Módulo de Backoffice (Stock)</h2>
+              <p className="auth-clean-subtitle">
+                Acceso restringido exclusivamente al rol: <strong>administrador</strong>
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', lineHeight: '1.6', fontSize: '0.9rem' }}>
+              <p>
+                <strong>Estado de sesión: </strong>
+                {activeUser ? (
+                  <span style={{ color: '#10b981', fontWeight: 600 }}>
+                    {activeUser.nombre} (Rol: {activeUser.rol || 'cliente'})
+                  </span>
+                ) : (
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>Visitante Anónimo (Sin autenticar)</span>
+                )}
+              </p>
+              <p style={{ marginTop: '0.5rem', color: '#6b7280' }}>
+                Este panel interactúa directamente con los endpoints del backend protegidos con{' '}
+                <code>JwtAuthGuard</code> y <code>RolesGuard</code>. Si el rol no está autorizado, la petición será
+                rechazada con HTTP 403 Forbidden.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTestBackofficeAccess}
+              className="clean-submit-btn"
+              style={{ background: '#4f46e5', marginBottom: '1rem' }}
+            >
+              Probar Petición a /api/stock/movimientos
+            </button>
+
+            {backofficeLog && (
+              <div
+                style={{
+                  background: '#111827',
+                  color: '#e5e7eb',
+                  padding: '1rem',
+                  borderRadius: '6px',
+                  fontFamily: 'monospace',
+                  fontSize: '0.85rem',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {backofficeLog}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Vistas de Autenticación y Perfil */}
-      {activeTab !== 'store' && (
+      {activeTab !== 'store' && activeTab !== 'backoffice' && (
         <div style={{ margin: '2rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {activeUser ? (
             <div className="auth-clean-wrapper" id="profile-card">
@@ -377,7 +614,10 @@ export default function App() {
               <div style={{ marginTop: '2rem', display: 'flex', gap: '0.75rem' }}>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('store')}
+                  onClick={() => {
+                    setAuthPromptMessage(null)
+                    setActiveTab('store')
+                  }}
                   className="clean-submit-btn"
                   style={{ background: '#4f46e5' }}
                 >

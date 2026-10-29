@@ -7,9 +7,9 @@ import {
 } from 'typeorm';
 
 export enum RolUsuario {
-  ADMIN_VENTAS = 'admin_ventas',
+  ADMINISTRADOR = 'administrador',
   CLIENTE = 'cliente',
-  SOPORTE = 'soporte',
+  VISITANTE = 'visitante',
 }
 
 @Entity('users')
@@ -36,7 +36,12 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatar?: string | null;
 
-  @Column({ type: 'varchar', length: 50, default: 'local', name: 'auth_provider' })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    default: 'local',
+    name: 'auth_provider',
+  })
   authProvider!: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true, name: 'provider_id' })
@@ -48,10 +53,14 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @Column({ type: 'varchar', length: 255, nullable: true, name: 'reset_password_token' })
+  @Column({
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+    name: 'reset_password_token',
+  })
   resetPasswordToken?: string | null;
 
   @Column({ type: 'timestamp', nullable: true, name: 'reset_password_expires' })
   resetPasswordExpires?: Date | null;
-
 }

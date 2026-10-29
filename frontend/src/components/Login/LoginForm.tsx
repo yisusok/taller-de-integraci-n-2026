@@ -14,7 +14,7 @@ interface LoginFormProps {
   apiBaseUrl?: string;
   onGoToRegister: () => void;
   onForgotPassword: () => void;
-  onSuccess?: (user: PublicUser) => void;
+  onSuccess?: (user: PublicUser, token?: string) => void;
 }
 
 const defaultApiUrl =
@@ -63,8 +63,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         throw new Error(msg || 'Credenciales incorrectas');
       }
 
+      if (data?.access_token) {
+        localStorage.setItem('access_token', data.access_token);
+      }
+
       if (onSuccess && data?.user) {
-        onSuccess(data.user);
+        onSuccess(data.user, data?.access_token);
       }
     } catch (err: unknown) {
       const e = err as Error;

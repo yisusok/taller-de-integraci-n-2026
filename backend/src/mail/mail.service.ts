@@ -23,13 +23,17 @@ export class MailService {
     }
 
     const host = process.env.SMTP_HOST;
-    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+    const port = process.env.SMTP_PORT
+      ? parseInt(process.env.SMTP_PORT, 10)
+      : 587;
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
     const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
     if (host && user && pass) {
-      this.logger.log(`Configurando transporte SMTP real hacia ${host}:${port} (${user})`);
+      this.logger.log(
+        `Configurando transporte SMTP real hacia ${host}:${port} (${user})`,
+      );
       this.transporter = nodemailer.createTransport({
         host,
         port,
@@ -40,7 +44,9 @@ export class MailService {
     }
 
     // Si no hay configuración SMTP en .env, creamos una cuenta real de pruebas en Ethereal
-    this.logger.log('SMTP no configurado en .env. Creando cuenta de correo de prueba real en Ethereal...');
+    this.logger.log(
+      'SMTP no configurado en .env. Creando cuenta de correo de prueba real en Ethereal...',
+    );
     try {
       this.etherealAccount = await nodemailer.createTestAccount();
       this.transporter = nodemailer.createTransport({
@@ -60,11 +66,15 @@ export class MailService {
     }
   }
 
-  async sendMail(options: SendMailOptions): Promise<{ messageId: string; previewUrl?: string | false }> {
+  async sendMail(
+    options: SendMailOptions,
+  ): Promise<{ messageId: string; previewUrl?: string | false }> {
     const transporter = await this.getTransporter();
     const from =
       process.env.MAIL_FROM ||
-      (this.etherealAccount ? `"E-Commerce" <${this.etherealAccount.user}>` : '"E-Commerce" <no-reply@ecommerce.local>');
+      (this.etherealAccount
+        ? `"E-Commerce" <${this.etherealAccount.user}>`
+        : '"E-Commerce" <no-reply@ecommerce.local>');
 
     const info = await transporter.sendMail({
       from,
@@ -76,13 +86,19 @@ export class MailService {
 
     const previewUrl = nodemailer.getTestMessageUrl(info);
     if (previewUrl) {
-      this.logger.log(`\n📬 ================= EMAIL ENVIADO (ETHEREAL) =================`);
+      this.logger.log(
+        `\n📬 ================= EMAIL ENVIADO (ETHEREAL) =================`,
+      );
       this.logger.log(`Destinatario: ${options.to}`);
       this.logger.log(`Asunto:       ${options.subject}`);
       this.logger.log(`Bandeja Web:  ${previewUrl}`);
-      this.logger.log(`===============================================================\n`);
+      this.logger.log(
+        `===============================================================\n`,
+      );
     } else {
-      this.logger.log(`Correo enviado exitosamente a ${options.to} (MessageId: ${info.messageId})`);
+      this.logger.log(
+        `Correo enviado exitosamente a ${options.to} (MessageId: ${info.messageId})`,
+      );
     }
 
     return {
@@ -91,7 +107,10 @@ export class MailService {
     };
   }
 
-  async sendPasswordResetEmail(to: string, token: string): Promise<{ previewUrl?: string | false }> {
+  async sendPasswordResetEmail(
+    to: string,
+    token: string,
+  ): Promise<{ previewUrl?: string | false }> {
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 

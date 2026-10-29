@@ -14,6 +14,7 @@ import { User, RolUsuario } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
 import { MailService } from '../mail/mail.service';
+import { JwtService } from '@nestjs/jwt';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -38,6 +39,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: getRepositoryToken(User), useValue: repository },
         { provide: MailService, useValue: mailService },
+        JwtService,
       ],
     }).compile();
 
@@ -139,6 +141,8 @@ describe('AuthService', () => {
         where: { email: 'juan@example.com' },
       });
       expect(result.user.id).toBe('uuid-1234');
+      expect(result.access_token).toBeDefined();
+      expect(typeof result.access_token).toBe('string');
       expect(
         (result.user as unknown as Record<string, unknown>).password_hash,
       ).toBeUndefined();
@@ -257,14 +261,15 @@ describe('AuthService', () => {
       });
 
       expect(repository.save).toHaveBeenCalled();
-      expect(result.id).toBe('uuid-google-1');
-      expect(result.email).toBe('usuario.google@example.com');
-      expect(result.nombre).toBe('Google User');
-      expect(result.avatar).toBe(
+      expect(result.user.id).toBe('uuid-google-1');
+      expect(result.user.email).toBe('usuario.google@example.com');
+      expect(result.user.nombre).toBe('Google User');
+      expect(result.user.avatar).toBe(
         'https://lh3.googleusercontent.com/a/photo123',
       );
+      expect(result.access_token).toBeDefined();
       expect(
-        (result as unknown as Record<string, unknown>).password_hash,
+        (result.user as unknown as Record<string, unknown>).password_hash,
       ).toBeUndefined();
     });
 
@@ -304,10 +309,11 @@ describe('AuthService', () => {
       expect(savedUser.avatar).toBe('https://new-avatar.com/new.png');
       expect(savedUser.providerId).toBe('google-oauth2|999999');
 
-      expect(result.nombre).toBe('Nombre Actualizado Desde Google');
-      expect(result.avatar).toBe('https://new-avatar.com/new.png');
+      expect(result.user.nombre).toBe('Nombre Actualizado Desde Google');
+      expect(result.user.avatar).toBe('https://new-avatar.com/new.png');
+      expect(result.access_token).toBeDefined();
       expect(
-        (result as unknown as Record<string, unknown>).password_hash,
+        (result.user as unknown as Record<string, unknown>).password_hash,
       ).toBeUndefined();
     });
 

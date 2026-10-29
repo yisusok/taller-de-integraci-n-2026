@@ -8,6 +8,8 @@ import { AppService } from './app.service';
 import { User } from './users/entities/user.entity';
 import { AuthModule } from './auth/auth.module';
 import { StockModule } from './stock/stock.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 
 @Module({
   imports: [
@@ -45,6 +47,14 @@ import { StockModule } from './stock/stock.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
   ],
 })

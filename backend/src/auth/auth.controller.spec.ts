@@ -28,18 +28,27 @@ describe('AuthController', () => {
   beforeEach(async () => {
     authService = {
       register: jest.fn().mockResolvedValue(mockUser),
-      login: jest.fn().mockResolvedValue({ user: mockUser, message: 'Inicio de sesión exitoso' }),
+      login: jest.fn().mockResolvedValue({
+        user: mockUser,
+        access_token: 'mock-jwt-token-xyz',
+        message: 'Inicio de sesión exitoso',
+      }),
       syncOauth: jest.fn().mockResolvedValue({
-        ...mockUser,
-        authProvider: 'google',
-        avatar: 'https://example.com/avatar.jpg',
-        providerId: 'google-oauth2|123456',
+        user: {
+          ...mockUser,
+          authProvider: 'google',
+          avatar: 'https://example.com/avatar.jpg',
+          providerId: 'google-oauth2|123456',
+        },
+        access_token: 'mock-jwt-token-xyz',
       }),
       forgotPassword: jest.fn().mockResolvedValue({
-        message: 'Si el correo está registrado, se enviará un enlace de recuperación.',
+        message:
+          'Si el correo está registrado, se enviará un enlace de recuperación.',
       }),
       resetPassword: jest.fn().mockResolvedValue({
-        message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.',
+        message:
+          'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.',
       }),
     };
 
@@ -67,7 +76,9 @@ describe('AuthController', () => {
     expect(authService.register).toHaveBeenCalledWith(dto);
     expect(result.id).toBe('uuid-1234');
     expect(result.email).toBe('carlos@example.com');
-    expect((result as unknown as Record<string, unknown>).password_hash).toBeUndefined();
+    expect(
+      (result as unknown as Record<string, unknown>).password_hash,
+    ).toBeUndefined();
   });
 
   it('POST /api/auth/login → autentica un usuario y devuelve sesión', async () => {
@@ -83,7 +94,7 @@ describe('AuthController', () => {
     expect(result.message).toBe('Inicio de sesión exitoso');
   });
 
-  it('POST /api/auth/sync-oauth → sincroniza cuenta Google OAuth y devuelve PublicUser', async () => {
+  it('POST /api/auth/sync-oauth → sincroniza cuenta Google OAuth y devuelve sesión con token', async () => {
     const dto: SyncOauthDto = {
       nombre: 'Carlos Gomez',
       email: 'carlos@example.com',
@@ -94,9 +105,10 @@ describe('AuthController', () => {
     const result = await controller.syncOauth(dto);
 
     expect(authService.syncOauth).toHaveBeenCalledWith(dto);
-    expect(result.id).toBe('uuid-1234');
-    expect(result.avatar).toBe('https://example.com/avatar.jpg');
-    expect(result.authProvider).toBe('google');
+    expect(result.user.id).toBe('uuid-1234');
+    expect(result.user.avatar).toBe('https://example.com/avatar.jpg');
+    expect(result.user.authProvider).toBe('google');
+    expect(result.access_token).toBe('mock-jwt-token-xyz');
   });
 
   it('POST /api/auth/forgot-password → emite solicitud de recuperación', async () => {
