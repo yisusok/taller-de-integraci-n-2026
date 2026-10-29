@@ -13,6 +13,7 @@ import { SyncOauthDto } from './dto/sync-oauth.dto';
 import * as crypto from 'crypto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { MailService } from '../mail/mail.service';
 export type PublicUser = Omit<User, 'password_hash'>;
 
 @Injectable()
@@ -20,6 +21,7 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly mailService: MailService,
   ) { }
 
   async register(dto: RegisterDto): Promise<PublicUser> {
@@ -59,6 +61,7 @@ export class AuthService {
       where: { email: email.trim().toLowerCase() },
     });
   }
+
   async syncOauth(dto: SyncOauthDto): Promise<PublicUser> {
     const emailLimpio = dto.email.trim().toLowerCase();
 
@@ -94,6 +97,7 @@ export class AuthService {
       throw new InternalServerErrorException('Error al sincronizar el usuario OAuth');
     }
   }
+
   async forgotPassword(dto: ForgotPasswordDto) {
     const emailLimpio = dto.email.trim().toLowerCase();
     const user = await this.userRepository.findOne({ where: { email: emailLimpio } });
@@ -102,27 +106,31 @@ export class AuthService {
       return { message: 'Si el correo está registrado, se enviará un enlace de recuperación.' };
     }
 
-    const token = crypto.randomBytes(32).toString('hex');
+    // Token criptográfico plano para el enlace del correo
+    const rawToken = crypto.randomBytes(32).toString('hex');
 
-    user.resetPasswordToken = token;
+    // Hash SHA-256 para almacenamiento seguro en BD (estándar OWASP contra fuga de tokens en dumps)
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    user.resetPasswordToken = tokenHash;
     user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
     await this.userRepository.save(user);
 
-    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
-    console.log(`\n📧 ================= RECUPERACIÓN DE CONTRASEÑA =================`);
-    console.log(`Para: ${user.email}`);
-    console.log(`Enlace: ${resetLink}`);
-    console.log(`=================================================================\n`);
+    // Enviar correo real con el token plano
+    const mailResult = await this.mailService.sendPasswordResetEmail(user.email, rawToken);
 
     return {
       message: 'Si el correo está registrado, se enviará un enlace de recuperación.',
-      ...(process.env.NODE_ENV !== 'production' && { token, resetLink }),
+      ...(process.env.NODE_ENV !== 'production' && mailResult.previewUrl && { previewUrl: mailResult.previewUrl }),
     };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
+    // Hashear el token recibido antes de buscar en la BD
+    const incomingTokenHash = crypto.createHash('sha256').update(dto.token.trim()).digest('hex');
+
     const user = await this.userRepository.findOne({
-      where: { resetPasswordToken: dto.token },
+      where: { resetPasswordToken: incomingTokenHash },
     });
 
     if (!user || !user.resetPasswordExpires) {
@@ -135,6 +143,7 @@ export class AuthService {
 
     user.password_hash = await bcrypt.hash(dto.newPassword, 10);
 
+    // Destrucción inmediata del token (single-use)
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
     await this.userRepository.save(user);

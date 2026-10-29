@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { AuthController } from './auth.controller';
 import { AuthService, PublicUser } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RolUsuario } from '../users/entities/user.entity';
 
 describe('AuthController', () => {
@@ -28,6 +32,12 @@ describe('AuthController', () => {
         authProvider: 'google',
         avatar: 'https://example.com/avatar.jpg',
         providerId: 'google-oauth2|123456',
+      }),
+      forgotPassword: jest.fn().mockResolvedValue({
+        message: 'Si el correo está registrado, se enviará un enlace de recuperación.',
+      }),
+      resetPassword: jest.fn().mockResolvedValue({
+        message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.',
       }),
     };
 
@@ -72,5 +82,60 @@ describe('AuthController', () => {
     expect(result.id).toBe('uuid-1234');
     expect(result.avatar).toBe('https://example.com/avatar.jpg');
     expect(result.authProvider).toBe('google');
+  });
+
+  it('POST /api/auth/forgot-password → emite solicitud de recuperación', async () => {
+    const dto: ForgotPasswordDto = { email: 'carlos@example.com' };
+
+    const result = await controller.forgotPassword(dto);
+
+    expect(authService.forgotPassword).toHaveBeenCalledWith(dto);
+    expect(result.message).toContain('Si el correo está registrado');
+  });
+
+  it('POST /api/auth/reset-password → redefine la contraseña con token válido', async () => {
+    const dto: ResetPasswordDto = {
+      token: 'valid-reset-token',
+      newPassword: 'NuevaContrasena123!',
+    };
+
+    const result = await controller.resetPassword(dto);
+
+    expect(authService.resetPassword).toHaveBeenCalledWith(dto);
+    expect(result.message).toContain('Contraseña actualizada exitosamente');
+  });
+
+  it('ResetPasswordDto rechaza contraseñas que no cumplen la política de complejidad', async () => {
+    const dtoSinMayuscula = plainToInstance(ResetPasswordDto, {
+      token: 'token-123',
+      newPassword: 'password123!',
+    });
+    const errorsSinMayus = await validate(dtoSinMayuscula);
+    expect(errorsSinMayus.length).toBeGreaterThan(0);
+    expect(errorsSinMayus[0].constraints?.matches).toBeDefined();
+
+    const dtoSinNumero = plainToInstance(ResetPasswordDto, {
+      token: 'token-123',
+      newPassword: 'PasswordSinNumero',
+    });
+    const errorsSinNumero = await validate(dtoSinNumero);
+    expect(errorsSinNumero.length).toBeGreaterThan(0);
+
+    const dtoCorta = plainToInstance(ResetPasswordDto, {
+      token: 'token-123',
+      newPassword: 'P1!',
+    });
+    const errorsCorta = await validate(dtoCorta);
+    expect(errorsCorta.length).toBeGreaterThan(0);
+    expect(errorsCorta[0].constraints?.minLength).toBeDefined();
+  });
+
+  it('ResetPasswordDto acepta contraseñas fuertes que cumplen todas las reglas', async () => {
+    const dtoValido = plainToInstance(ResetPasswordDto, {
+      token: 'token-123',
+      newPassword: 'ContrasenaSegura2026!',
+    });
+    const errors = await validate(dtoValido);
+    expect(errors.length).toBe(0);
   });
 });

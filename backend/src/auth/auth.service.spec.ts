@@ -1,16 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { BadRequestException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { DeepPartial, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
 import { User, RolUsuario } from '../users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { SyncOauthDto } from './dto/sync-oauth.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { MailService } from '../mail/mail.service';
 
 describe('AuthService', () => {
   let service: AuthService;
   let repository: jest.Mocked<Partial<Repository<User>>>;
+  let mailService: Partial<MailService>;
 
   beforeEach(async () => {
     repository = {
@@ -19,10 +24,15 @@ describe('AuthService', () => {
       save: jest.fn(),
     };
 
+    mailService = {
+      sendPasswordResetEmail: jest.fn().mockResolvedValue({ previewUrl: 'https://ethereal.email/message/mock' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: getRepositoryToken(User), useValue: repository },
+        { provide: MailService, useValue: mailService },
       ],
     }).compile();
 
@@ -53,7 +63,6 @@ describe('AuthService', () => {
 
       const result = await service.register(dto);
 
-      // Verifica que se busca con el email del DTO (ya transformado por el DTO validator)
       expect(repository.findOne).toHaveBeenCalledWith({
         where: { email: dto.email },
       });
@@ -64,11 +73,9 @@ describe('AuthService', () => {
 
       expect(createArg.authProvider).toBe('local');
 
-      // La contraseña guardada debe estar cifrada con bcrypt
       const isHashValid = await bcrypt.compare('Password123!', createArg.password_hash as string);
       expect(isHashValid).toBe(true);
 
-      // password_hash no debe exponerse en la respuesta
       const resultObj = result as unknown as Record<string, unknown>;
       expect(resultObj.password_hash).toBeUndefined();
     });
@@ -169,10 +176,8 @@ describe('AuthService', () => {
 
       const result = await service.syncOauth(updateDto);
 
-      // Verifica que no se llamó a create()
       expect(repository.create).not.toHaveBeenCalled();
 
-      // Verifica que el save se llamó con los campos actualizados pero con el email inalterado
       const savedUser = (repository.save as jest.Mock).mock.calls[0][0] as User;
       expect(savedUser.email).toBe('usuario.google@example.com');
       expect(savedUser.nombre).toBe('Nombre Actualizado Desde Google');
@@ -190,6 +195,126 @@ describe('AuthService', () => {
       (repository.save as jest.Mock).mockRejectedValue(new Error('DB error'));
 
       await expect(service.syncOauth(dto)).rejects.toThrow(InternalServerErrorException);
+    });
+  });
+
+  describe('forgotPassword()', () => {
+    it('genera token temporal en texto plano, persiste su hash SHA-256 en BD y envía el correo', async () => {
+      const mockUser: User = {
+        id: 'uuid-1',
+        email: 'recuperar@example.com',
+        nombre: 'Carlos',
+        rol: RolUsuario.CLIENTE,
+        authProvider: 'local',
+        password_hash: 'hash',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (repository.findOne as jest.Mock).mockResolvedValue({ ...mockUser });
+      (repository.save as jest.Mock).mockImplementation((u: User) => Promise.resolve(u));
+
+      const result = await service.forgotPassword({ email: '  RECUPERAR@EXAMPLE.COM  ' });
+
+      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'recuperar@example.com' } });
+      expect(repository.save).toHaveBeenCalled();
+
+      const savedUser = (repository.save as jest.Mock).mock.calls[0][0] as User;
+      expect(savedUser.resetPasswordToken).toBeDefined();
+      expect(typeof savedUser.resetPasswordToken).toBe('string');
+      // Hash SHA-256 en hexadecimal tiene exactamente 64 caracteres
+      expect(savedUser.resetPasswordToken?.length).toBe(64);
+      expect(savedUser.resetPasswordExpires).toBeInstanceOf(Date);
+
+      // El correo debe enviarse con el token en texto plano de 64 caracteres (32 bytes hex)
+      expect(mailService.sendPasswordResetEmail).toHaveBeenCalledWith(
+        'recuperar@example.com',
+        expect.stringMatching(/^[a-f0-9]{64}$/),
+      );
+      expect(result.message).toBe('Si el correo está registrado, se enviará un enlace de recuperación.');
+    });
+
+    it('devuelve mensaje sin error ni persistencia si el usuario no existe (evita enumeración)', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.forgotPassword({ email: 'noexiste@example.com' });
+
+      expect(repository.findOne).toHaveBeenCalledWith({ where: { email: 'noexiste@example.com' } });
+      expect(repository.save).not.toHaveBeenCalled();
+      expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+      expect(result.message).toBe('Si el correo está registrado, se enviará un enlace de recuperación.');
+    });
+  });
+
+  describe('resetPassword()', () => {
+    it('valida el hash SHA-256 del token, actualiza la contraseña e invalida el token temporal', async () => {
+      const rawToken = 'valid-token-12345';
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      const existingUser: User = {
+        id: 'uuid-1',
+        email: 'recuperar@example.com',
+        nombre: 'Carlos',
+        rol: RolUsuario.CLIENTE,
+        authProvider: 'local',
+        password_hash: 'old-hash',
+        resetPasswordToken: tokenHash,
+        resetPasswordExpires: new Date(Date.now() + 10 * 60 * 1000), // expira en 10 min
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (repository.findOne as jest.Mock).mockResolvedValue({ ...existingUser });
+      (repository.save as jest.Mock).mockImplementation((u: User) => Promise.resolve(u));
+
+      const result = await service.resetPassword({
+        token: rawToken,
+        newPassword: 'NewPassword123!',
+      });
+
+      expect(repository.findOne).toHaveBeenCalledWith({
+        where: { resetPasswordToken: tokenHash },
+      });
+
+      const savedUser = (repository.save as jest.Mock).mock.calls[0][0] as User;
+      expect(savedUser.resetPasswordToken).toBeNull();
+      expect(savedUser.resetPasswordExpires).toBeNull();
+      const isNewHashValid = await bcrypt.compare('NewPassword123!', savedUser.password_hash as string);
+      expect(isNewHashValid).toBe(true);
+
+      expect(result.message).toContain('Contraseña actualizada exitosamente');
+    });
+
+    it('lanza BadRequestException si el token es inválido o no existe', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.resetPassword({ token: 'token-inexistente', newPassword: 'NewPassword123!' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('lanza BadRequestException si el token ha expirado', async () => {
+      const rawToken = 'expired-token';
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      const expiredUser: User = {
+        id: 'uuid-1',
+        email: 'recuperar@example.com',
+        nombre: 'Carlos',
+        rol: RolUsuario.CLIENTE,
+        authProvider: 'local',
+        password_hash: 'old-hash',
+        resetPasswordToken: tokenHash,
+        resetPasswordExpires: new Date(Date.now() - 5000), // expiró hace 5 seg
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (repository.findOne as jest.Mock).mockResolvedValue(expiredUser);
+
+      await expect(
+        service.resetPassword({ token: rawToken, newPassword: 'NewPassword123!' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

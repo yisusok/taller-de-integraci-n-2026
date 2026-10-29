@@ -14,6 +14,7 @@ interface RegisterFormProps {
   apiBaseUrl?: string;
   onSuccess?: (usuario: UsuarioCreado) => void;
   onGoToLogin?: () => void;
+  onForgotPassword?: () => void;
 }
 
 const defaultApiUrl =
@@ -24,6 +25,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   apiBaseUrl = defaultApiUrl,
   onSuccess,
   onGoToLogin,
+  onForgotPassword,
 }) => {
   const { loginWithRedirect, logout, isAuthenticated, user, isLoading: authLoading } = useAuth0();
 
@@ -424,7 +426,13 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
 
         <button
           type="button"
-          onClick={() => loginWithRedirect()}
+          onClick={() =>
+            loginWithRedirect({
+              authorizationParams: {
+                connection: 'google-oauth2',
+              },
+            })
+          }
           className="auth-google-btn"
           id="btn-login-google"
         >
@@ -434,14 +442,14 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
             <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
           </svg>
-          Ingresar con Google
+          Ingresar directamente con Google
         </button>
 
         <div style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
           ¿Ya tienes cuenta?{' '}
           <button
             type="button"
-            onClick={() => loginWithRedirect()}
+            onClick={onGoToLogin || (() => loginWithRedirect())}
             style={{
               background: 'none',
               border: 'none',
@@ -452,9 +460,31 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               padding: 0
             }}
           >
-            Iniciar Sesión con Auth0
+            Iniciar Sesión
           </button>
         </div>
+
+        {onForgotPassword && (
+          <div style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.85rem' }}>
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              id="btn-to-forgot-password"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#4f46e5',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0,
+                fontSize: '0.85rem',
+              }}
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
+          </div>
+        )}
       </form>
     </div>
 

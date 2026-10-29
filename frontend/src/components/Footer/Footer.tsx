@@ -1,10 +1,10 @@
 import { useAuth0 } from '@auth0/auth0-react';
 import './Footer.css';
 interface FooterProps {
-    onNavigate?: (tab: 'register' | 'overview') => void;
+    onNavigate?: (tab: 'login' | 'register' | 'overview') => void;
 }
 export const Footer = ({ onNavigate }: FooterProps) => {
-    const { loginWithRedirect, logout, isAuthenticated } = useAuth0();
+    const { logout, isAuthenticated } = useAuth0();
 
     return (
         <footer className="footer-container">
@@ -39,7 +39,8 @@ export const Footer = ({ onNavigate }: FooterProps) => {
                                         href="#login"
                                         onClick={(e) => {
                                             e.preventDefault();
-                                            loginWithRedirect();
+                                            onNavigate?.('login');
+                                            window.scrollTo({ top: 0, behavior: 'smooth' });
                                         }}
                                     >
                                         Iniciar Sesión
