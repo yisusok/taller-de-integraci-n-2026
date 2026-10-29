@@ -7,4 +7,3 @@ export const IS_PUBLIC_KEY = 'isPublic';
  * Uso: @Public() sobre el handler o controller.
  */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
-

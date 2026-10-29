@@ -4,6 +4,12 @@ import { RolesGuard } from './roles.guard';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolUsuario } from '../../users/entities/user.entity';
 
+interface MockUser {
+  id?: string;
+  email?: string;
+  rol?: RolUsuario;
+}
+
 describe('Guards de Control de Acceso y Middleware (AUTH-5)', () => {
   let reflector: Reflector;
   let rolesGuard: RolesGuard;
@@ -15,7 +21,7 @@ describe('Guards de Control de Acceso y Middleware (AUTH-5)', () => {
     jwtAuthGuard = new JwtAuthGuard(reflector);
   });
 
-  const createMockContext = (user?: any): ExecutionContext => {
+  const createMockContext = (user?: MockUser): ExecutionContext => {
     return {
       getHandler: jest.fn(),
       getClass: jest.fn(),

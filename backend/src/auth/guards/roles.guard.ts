@@ -8,6 +8,14 @@ import { Reflector } from '@nestjs/core';
 import { RolUsuario } from '../../users/entities/user.entity';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
+interface RequestWithUser {
+  user?: {
+    id: string;
+    email: string;
+    rol: RolUsuario;
+  };
+}
+
 /**
  * Guard de autorización por roles.
  * Requiere que el JwtAuthGuard haya inyectado req.user previamente.
@@ -28,7 +36,7 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<RequestWithUser>();
     const user = request.user;
 
     if (!user || !user.rol) {
@@ -45,4 +53,3 @@ export class RolesGuard implements CanActivate {
     return true;
   }
 }
-

@@ -303,7 +303,9 @@ describe('AuthService', () => {
 
       expect(repository.create).not.toHaveBeenCalled();
 
-      const savedUser = ((repository.save as jest.Mock).mock.calls as unknown[][])[0][0] as User;
+      const savedUser = (
+        (repository.save as jest.Mock).mock.calls as unknown[][]
+      )[0][0] as User;
       expect(savedUser.email).toBe('usuario.google@example.com');
       expect(savedUser.nombre).toBe('Nombre Actualizado Desde Google');
       expect(savedUser.avatar).toBe('https://new-avatar.com/new.png');
@@ -355,7 +357,9 @@ describe('AuthService', () => {
       });
       expect(repository.save).toHaveBeenCalled();
 
-      const savedUser = ((repository.save as jest.Mock).mock.calls as unknown[][])[0][0] as User;
+      const savedUser = (
+        (repository.save as jest.Mock).mock.calls as unknown[][]
+      )[0][0] as User;
       expect(savedUser.resetPasswordToken).toBeDefined();
       expect(typeof savedUser.resetPasswordToken).toBe('string');
       // Hash SHA-256 en hexadecimal tiene exactamente 64 caracteres
@@ -425,7 +429,9 @@ describe('AuthService', () => {
         where: { resetPasswordToken: tokenHash },
       });
 
-      const savedUser = ((repository.save as jest.Mock).mock.calls as unknown[][])[0][0] as User;
+      const savedUser = (
+        (repository.save as jest.Mock).mock.calls as unknown[][]
+      )[0][0] as User;
       expect(savedUser.resetPasswordToken).toBeNull();
       expect(savedUser.resetPasswordExpires).toBeNull();
       const isNewHashValid = await bcrypt.compare(
