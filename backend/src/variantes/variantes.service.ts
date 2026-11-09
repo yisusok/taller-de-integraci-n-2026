@@ -4,6 +4,7 @@ import { UpdateVarianteDto } from './dto/update-variante.dto';
 
 @Injectable()
 export class VariantesService {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   create(createVarianteDto: CreateVarianteDto) {
     return 'This action adds a new variante';
   }
@@ -15,7 +16,7 @@ export class VariantesService {
   findOne(id: number) {
     return `This action returns a #${id} variante`;
   }
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   update(id: number, updateVarianteDto: UpdateVarianteDto) {
     return `This action updates a #${id} variante`;
   }

@@ -4,6 +4,7 @@ import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 
 @Injectable()
 export class CategoriasService {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   create(createCategoriaDto: CreateCategoriaDto) {
     return 'This action adds a new categoria';
   }
@@ -15,7 +16,7 @@ export class CategoriasService {
   findOne(id: number) {
     return `This action returns a #${id} categoria`;
   }
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   update(id: number, updateCategoriaDto: UpdateCategoriaDto) {
     return `This action updates a #${id} categoria`;
   }

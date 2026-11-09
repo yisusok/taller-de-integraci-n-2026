@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { VariantesService } from './variantes.service';
 import { CreateVarianteDto } from './dto/create-variante.dto';
 import { UpdateVarianteDto } from './dto/update-variante.dto';
@@ -23,7 +31,10 @@ export class VariantesController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateVarianteDto: UpdateVarianteDto) {
+  update(
+    @Param('id') id: string,
+    @Body() updateVarianteDto: UpdateVarianteDto,
+  ) {
     return this.variantesService.update(+id, updateVarianteDto);
   }
 

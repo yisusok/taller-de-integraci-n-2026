@@ -4,6 +4,7 @@ import { UpdateProductoDto } from './dto/update-producto.dto';
 
 @Injectable()
 export class ProductosService {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   create(createProductoDto: CreateProductoDto) {
     return 'This action adds a new producto';
   }
@@ -15,7 +16,7 @@ export class ProductosService {
   findOne(id: number) {
     return `This action returns a #${id} producto`;
   }
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   update(id: number, updateProductoDto: UpdateProductoDto) {
     return `This action updates a #${id} producto`;
   }
