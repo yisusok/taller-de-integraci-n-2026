@@ -1,90 +1,126 @@
-# E-Commerce - Taller de Integración 2026
+# E-Commerce — Taller de Integración 2026
 
-Plataforma de comercio electrónico desarrollada con **NestJS**, **React** y **PostgreSQL**.
+Plataforma de comercio electrónico con **NestJS**, **React** y **PostgreSQL**.
 
 ---
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```text
 taller-de-integraci-n-2026/
-├── backend/                   # API REST con NestJS y TypeScript
-│   ├── src/
-│   │   ├── app.controller.ts
-│   │   ├── app.module.ts      # Conexión TypeORM con PostgreSQL local
-│   │   ├── app.service.ts
-│   │   └── main.ts
-│   ├── package.json
-│   └── tsconfig.json
-├── frontend/                  # Aplicación SPA con React, Vite y TypeScript
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── assets/
-│   ├── package.json
-│   └── vite.config.ts
-├── documentacion/             # Documentación del proyecto
-│   ├── DR/                    # Architecture Decision Records (ADRs)
-│   │   ├── README.md          # ¿Qué son los Decision Records y plantilla estándar?
-│   │   └── ADR-001-stack-tecnologico.md # Decisión del stack NestJS + React + PostgreSQL
-│   ├── diagramas/             # Diagramas arquitectónicos y modelos de datos
-│   │   └── README.md          # Diagrama C4 Contenedores y Modelo ER
-│   └── README.md              # Índice general de documentación
-├── .env.example               # Plantilla de variables de entorno
-└── .gitignore                 # Exclusiones de Git
+├── backend/                        # API REST (NestJS + TypeScript)
+│   └── src/
+│       ├── app.controller.ts       # GET /api/health
+│       ├── app.module.ts           # Módulo raíz (TypeORM, Config, Auth)
+│       ├── main.ts                 # Bootstrap — prefijo global /api, CORS, ValidationPipe
+│       ├── auth/
+│       │   ├── auth.controller.ts  # POST /api/auth/register
+│       │   ├── auth.service.ts     # Lógica de registro y búsqueda de usuarios
+│       │   ├── auth.module.ts
+│       │   └── dto/
+│       │       └── register.dto.ts # Validación y transformación de entrada
+│       └── users/
+│           └── entities/
+│               └── user.entity.ts  # Entidad User (preparada para Auth0)
+│
+├── frontend/                       # SPA (React 19 + TypeScript + Vite)
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       └── components/
+│           └── RegisterForm.tsx
+│
+├── documentacion/
+│   ├── DR/                         # Architecture Decision Records
+│   └── diagramas/                  # Diagramas C4 y ER
+│
+├── .env.example                    # Variables de entorno (incluye Auth0)
+└── .gitignore
 ```
 
 ---
 
-## 🚀 Requisitos Previos
+## Endpoints del Backend
 
-* **Node.js**: v18+ o superior (ejecutar `node -v` para comprobar)
-* **PostgreSQL instalado localmente** (ej. servicio nativo de Windows, pgAdmin o instancia cloud de PostgreSQL)
-* **npm** o gestor de paquetes de Node
+| Método | Ruta                  | Descripción                          |
+|--------|-----------------------|--------------------------------------|
+| GET    | `/api/health`         | Health check del servidor            |
+| POST   | `/api/auth/register`  | Registro de usuario (local / bcrypt) |
+
+> **Próximamente:** `POST /api/auth/login` y guards JWT de Auth0.
 
 ---
 
-## 🛠️ Puesta en Marcha
+## Entidad `User`
 
-### 1. Variables de Entorno
-Copia el archivo `.env.example` a `.env` en la raíz (o en `backend/.env`) y ajusta las credenciales de tu PostgreSQL local:
+La tabla `users` ya está preparada para Auth0:
+
+| Campo           | Tipo        | Descripción                                      |
+|-----------------|-------------|--------------------------------------------------|
+| `id`            | `uuid`      | PK generada automáticamente                      |
+| `nombre`        | `varchar`   | Nombre del usuario                               |
+| `email`         | `varchar`   | Email único, no actualizable                     |
+| `password_hash` | `varchar?`  | Nulo para usuarios de Auth0                      |
+| `authProvider`  | `varchar`   | `'local'` o `'auth0'`                           |
+| `providerId`    | `varchar?`  | Sub de Auth0 (`auth0|64f...`) para usuarios SSO  |
+| `rol`           | `enum`      | `cliente`, `admin_ventas`, `soporte`             |
+| `createdAt`     | `timestamp` | —                                                |
+| `updatedAt`     | `timestamp` | —                                                |
+
+---
+
+## Variables de Entorno
+
+Copia `.env.example` a `.env` en la carpeta `backend/` y completa los valores:
+
 ```bash
-cp .env.example .env
-```
-Contenido por defecto:
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=tu_contraseña_local
-DB_NAME=ecommerce_db
+cp .env.example backend/.env
 ```
 
-### 2. Base de Datos (PostgreSQL Local)
-Asegúrate de que tu servicio PostgreSQL esté corriendo y crea la base de datos (mediante psql o pgAdmin):
+Las variables de Auth0 (`AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, etc.) se usarán en la próxima fase de integración.
+
+---
+
+## Puesta en Marcha
+
+### 1. Base de Datos
+
+Asegurate de tener PostgreSQL corriendo y crear la base:
+
 ```sql
 CREATE DATABASE ecommerce_db;
 ```
 
-### 3. Iniciar el Backend (NestJS)
+### 2. Backend (NestJS — puerto 3000)
+
 ```bash
 cd backend
 npm install
 npm run start:dev
 ```
-El servidor backend se ejecutará en: `http://localhost:3000`
 
-### 4. Iniciar el Frontend (React)
+Verificar: `GET http://localhost:3000/api/health`
+
+### 3. Frontend (React — puerto 5173)
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-La aplicación cliente se ejecutará en: `http://localhost:5173`
 
 ---
 
-## 📚 Documentación y Decision Records
+## Tests
 
-* Consulta la [Guía de Decision Records](./documentacion/DR/README.md) para conocer cómo documentamos decisiones técnicas.
-* Consulta los [Diagramas del Sistema](./documentacion/diagramas/README.md) para entender la arquitectura y el modelo de datos.
+```bash
+cd backend
+npm test
+```
+
+---
+
+## Documentación
+
+- [Architecture Decision Records](./documentacion/DR/README.md)
+- [Diagramas del Sistema](./documentacion/diagramas/README.md)

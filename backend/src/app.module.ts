@@ -1,11 +1,20 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProductosModule } from './productos/productos.module';
 import { CategoriasModule } from './categorias/categorias.module';
 import { VariantesModule } from './variantes/variantes.module';
+import { User } from './users/entities/user.entity';
+import { Address } from './addresses/entities/address.entity';
+import { AuthModule } from './auth/auth.module';
+import { StockModule } from './stock/stock.module';
+import { AddressesModule } from './addresses/addresses.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 
 @Module({
   imports: [
@@ -13,6 +22,12 @@ import { VariantesModule } from './variantes/variantes.module';
       isGlobal: true,
       envFilePath: ['.env', '../.env'],
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 60,
+      },
+    ]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -24,14 +39,32 @@ import { VariantesModule } from './variantes/variantes.module';
         password: config.get<string>('DB_PASSWORD', 'postgres'),
         database: config.get<string>('DB_NAME', 'ecommerce_db'),
         autoLoadEntities: true,
-        synchronize: config.get<string>('NODE_ENV') !== 'production', // Solo para desarrollo
+        entities: [User, Address],
+        synchronize: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
     ProductosModule,
     CategoriasModule,
     VariantesModule,
+    AuthModule,
+    StockModule,
+    AddressesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
 export class AppModule {}
