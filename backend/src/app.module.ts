@@ -5,6 +5,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ProductosModule } from './productos/productos.module';
+import { CategoriasModule } from './categorias/categorias.module';
+import { VariantesModule } from './variantes/variantes.module';
 import { User } from './users/entities/user.entity';
 import { Address } from './addresses/entities/address.entity';
 import { AuthModule } from './auth/auth.module';
@@ -40,6 +43,9 @@ import { RolesGuard } from './auth/guards/roles.guard';
         synchronize: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
+    ProductosModule,
+    CategoriasModule,
+    VariantesModule,
     AuthModule,
     StockModule,
     AddressesModule,
