@@ -4,13 +4,20 @@ import {
   Column,
   CreateDateColumn,
   Index,
+  Check,
+  ManyToOne,
+  JoinColumn,
   BeforeUpdate,
   BeforeRemove,
 } from 'typeorm';
 import { TipoMovimiento } from '../enums/tipo-movimiento.enum';
+import { Variante } from '../../variantes/entities/variante.entity';
+import { User } from '../../users/entities/user.entity';
 
 @Entity('stock_movements')
 @Index(['variante_id', 'created_at'])
+@Index('idx_stock_movements_usuario', ['usuario_id'])
+@Check('chk_stock_movements_cantidad_positive', '"cantidad" > 0')
 export class StockMovement {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -19,17 +26,16 @@ export class StockMovement {
   @Index()
   variante_id: string;
 
+  @ManyToOne(() => Variante, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'variante_id' })
+  variante?: Variante;
+
   @Column({
     type: 'enum',
     enum: TipoMovimiento,
   })
   tipo_movimiento: TipoMovimiento;
 
-  /**
-   * Cantidad de unidades involucradas en el movimiento.
-   * Siempre se registra como un entero positivo (> 0).
-   * El impacto (adición o sustracción) se determina estrictamente por el `tipo_movimiento`.
-   */
   @Column({ type: 'int' })
   cantidad: number;
 
@@ -39,12 +45,12 @@ export class StockMovement {
   @Column({ type: 'uuid', nullable: true })
   usuario_id: string | null;
 
+  @ManyToOne(() => User, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'usuario_id' })
+  usuario?: User | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
-
-  // =========================================================================
-  // Reglas de Inmutabilidad (Append-Only Ledger)
-  // =========================================================================
 
   @BeforeUpdate()
   preventUpdate(): void {

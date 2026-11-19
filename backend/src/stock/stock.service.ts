@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,6 +14,7 @@ import {
   SelectQueryBuilder,
 } from 'typeorm';
 import { StockMovement } from './entities/stock-movement.entity';
+import { Variante } from '../variantes/entities/variante.entity';
 import { ManualExtractionDto } from './dto/manual-extraction.dto';
 import { TipoMovimiento } from './enums/tipo-movimiento.enum';
 
@@ -28,6 +30,12 @@ export type NivelAlertaStock = 'agotado' | 'critico' | 'bajo';
 
 export interface LowStockAlert {
   variante_id: string;
+  producto_id: string;
+  producto_nombre: string;
+  producto_sku: string;
+  talle: string;
+  color: string;
+  sku_variante: string;
   existencias_actuales: number;
   total_ingresos: number;
   total_salidas: number;
@@ -40,6 +48,7 @@ export interface LowStockAlertsResponse {
   total_alertas: number;
   alertas: LowStockAlert[];
 }
+
 export interface RecordMovementInput {
   variante_id: string;
   tipo_movimiento: TipoMovimiento;
@@ -63,6 +72,9 @@ interface MovementTotalRow {
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 50;
 
+const NET_STOCK_SQL =
+  'COALESCE(SUM(CASE WHEN m.tipo_movimiento = :ingreso THEN m.cantidad ELSE -m.cantidad END), 0)';
+
 const OUTBOUND_TYPES: ReadonlySet<TipoMovimiento> = new Set([
   TipoMovimiento.VENTA,
   TipoMovimiento.EXTRACCION_MANUAL,
@@ -75,6 +87,8 @@ export class StockService implements OnModuleInit {
   constructor(
     @InjectRepository(StockMovement)
     private readonly stockMovementRepository: Repository<StockMovement>,
+    @InjectRepository(Variante)
+    private readonly varianteRepository: Repository<Variante>,
     private readonly dataSource: DataSource,
   ) { }
 
@@ -88,11 +102,8 @@ export class StockService implements OnModuleInit {
         END;
         $$ LANGUAGE plpgsql
       `);
-      await this.dataSource.query(
-        'DROP TRIGGER IF EXISTS trg_prevent_stock_movement_mutation ON stock_movements',
-      );
       await this.dataSource.query(`
-        CREATE TRIGGER trg_prevent_stock_movement_mutation
+        CREATE OR REPLACE TRIGGER trg_prevent_stock_movement_mutation
         BEFORE UPDATE OR DELETE ON stock_movements
         FOR EACH ROW EXECUTE FUNCTION fn_prevent_stock_movement_mutation()
       `);
@@ -103,6 +114,7 @@ export class StockService implements OnModuleInit {
       );
     }
   }
+
   async recordMovement(input: RecordMovementInput): Promise<StockMovement> {
     if (!Number.isInteger(input.cantidad) || input.cantidad <= 0) {
       throw new BadRequestException(
@@ -122,6 +134,15 @@ export class StockService implements OnModuleInit {
     await queryRunner.startTransaction();
 
     try {
+      const variante = await queryRunner.manager.findOne(Variante, {
+        where: { id: input.variante_id },
+      });
+      if (!variante) {
+        throw new NotFoundException(
+          `Variante con ID ${input.variante_id} no encontrada.`,
+        );
+      }
+
       if (OUTBOUND_TYPES.has(input.tipo_movimiento)) {
         await this.assertSufficientStock(
           queryRunner,
@@ -148,6 +169,7 @@ export class StockService implements OnModuleInit {
       await queryRunner.release();
     }
   }
+
   async recordManualExtraction(
     dto: ManualExtractionDto,
     usuarioId: string,
@@ -175,34 +197,91 @@ export class StockService implements OnModuleInit {
     );
   }
 
+  async getStockByVariants(
+    varianteIds: string[],
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (varianteIds.length === 0) {
+      return result;
+    }
+
+    const ids = Array.from(new Set(varianteIds));
+    const rows = await this.stockMovementRepository
+      .createQueryBuilder('m')
+      .select('m.variante_id', 'variante_id')
+      .addSelect(NET_STOCK_SQL, 'existencias_actuales')
+      .where('m.variante_id IN (:...ids)', { ids })
+      .setParameter('ingreso', TipoMovimiento.INGRESO_PROVEEDOR)
+      .groupBy('m.variante_id')
+      .getRawMany<{
+        variante_id: string;
+        existencias_actuales: string | number;
+      }>();
+
+    for (const row of rows) {
+      result.set(row.variante_id, Number(row.existencias_actuales));
+    }
+
+    return result;
+  }
+
+  async hasMovements(varianteIds: string[]): Promise<boolean> {
+    if (varianteIds.length === 0) {
+      return false;
+    }
+
+    const ids = Array.from(new Set(varianteIds));
+    const count = await this.stockMovementRepository
+      .createQueryBuilder('m')
+      .where('m.variante_id IN (:...ids)', { ids })
+      .getCount();
+
+    return count > 0;
+  }
+
   async getLowStockAlerts(umbral = 5): Promise<LowStockAlertsResponse> {
     const rawThreshold =
       typeof umbral === 'number' && Number.isFinite(umbral) ? umbral : 5;
     const safeThreshold = Math.max(0, Math.min(Math.floor(rawThreshold), 1000));
 
-    const rawRows = await this.stockMovementRepository
-      .createQueryBuilder('m')
-      .select('m.variante_id', 'variante_id')
+    const rawRows = await this.varianteRepository
+      .createQueryBuilder('v')
+      .innerJoin('v.producto', 'p')
+      .leftJoin(StockMovement, 'm', 'm.variante_id = v.id')
+      .where('v.activa = :varActiva AND p.activo = :prodActivo', {
+        varActiva: true,
+        prodActivo: true,
+      })
+      .select('v.id', 'variante_id')
+      .addSelect('p.id', 'producto_id')
+      .addSelect('p.nombre', 'producto_nombre')
+      .addSelect('p.sku', 'producto_sku')
+      .addSelect('v.talle', 'talle')
+      .addSelect('v.color', 'color')
+      .addSelect('v.sku_variante', 'sku_variante')
       .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento = '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE 0 END), 0)`,
+        'COALESCE(SUM(CASE WHEN m.tipo_movimiento = :ingreso THEN m.cantidad ELSE 0 END), 0)',
         'total_ingresos',
       )
       .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento != '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE 0 END), 0)`,
+        'COALESCE(SUM(CASE WHEN m.tipo_movimiento IS NOT NULL AND m.tipo_movimiento != :ingreso THEN m.cantidad ELSE 0 END), 0)',
         'total_salidas',
       )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento = '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE -m.cantidad END), 0)`,
-        'existencias_actuales',
-      )
-      .groupBy('m.variante_id')
-      .having(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento = '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE -m.cantidad END), 0) <= :umbral`,
-        { umbral: safeThreshold },
-      )
+      .addSelect(NET_STOCK_SQL, 'existencias_actuales')
+      .setParameter('ingreso', TipoMovimiento.INGRESO_PROVEEDOR)
+      .groupBy('v.id')
+      .addGroupBy('p.id')
+      .having(`${NET_STOCK_SQL} <= :umbral`, { umbral: safeThreshold })
       .orderBy('existencias_actuales', 'ASC')
+      .addOrderBy('p.nombre', 'ASC')
       .getRawMany<{
         variante_id: string;
+        producto_id: string;
+        producto_nombre: string;
+        producto_sku: string;
+        talle: string;
+        color: string;
+        sku_variante: string;
         total_ingresos: string | number;
         total_salidas: string | number;
         existencias_actuales: string | number;
@@ -220,6 +299,12 @@ export class StockService implements OnModuleInit {
       }
       return {
         variante_id: row.variante_id,
+        producto_id: row.producto_id,
+        producto_nombre: row.producto_nombre,
+        producto_sku: row.producto_sku,
+        talle: row.talle,
+        color: row.color,
+        sku_variante: row.sku_variante,
         existencias_actuales: stock,
         total_ingresos: Number(row.total_ingresos),
         total_salidas: Number(row.total_salidas),
@@ -260,14 +345,16 @@ export class StockService implements OnModuleInit {
       skip: Math.max(offset, 0),
     });
   }
+
   private async assertSufficientStock(
     queryRunner: QueryRunner,
     varianteId: string,
     cantidad: number,
   ): Promise<void> {
-    await queryRunner.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-      varianteId,
-    ]);
+    await queryRunner.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [varianteId],
+    );
 
     const { existencias_actuales } = await this.aggregateSummary(
       () => queryRunner.manager.createQueryBuilder(StockMovement, 'm'),
@@ -280,6 +367,7 @@ export class StockService implements OnModuleInit {
       );
     }
   }
+
   private async aggregateSummary(
     createQueryBuilder: () => SelectQueryBuilder<StockMovement>,
     varianteId: string,

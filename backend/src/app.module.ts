@@ -1,17 +1,19 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { User } from './users/entities/user.entity';
-import { Address } from './addresses/entities/address.entity';
 import { AuthModule } from './auth/auth.module';
 import { StockModule } from './stock/stock.module';
 import { AddressesModule } from './addresses/addresses.module';
+import { CategoriasModule } from './categorias/categorias.module';
+import { ProductosModule } from './productos/productos.module';
+import { VariantesModule } from './variantes/variantes.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { PgExceptionFilter } from './common/filters/pg-exception.filter';
 
 @Module({
   imports: [
@@ -36,17 +38,23 @@ import { RolesGuard } from './auth/guards/roles.guard';
         password: config.get<string>('DB_PASSWORD', 'postgres'),
         database: config.get<string>('DB_NAME', 'ecommerce_db'),
         autoLoadEntities: true,
-        entities: [User, Address],
         synchronize: config.get<string>('NODE_ENV') !== 'production',
       }),
     }),
     AuthModule,
     StockModule,
     AddressesModule,
+    CategoriasModule,
+    ProductosModule,
+    VariantesModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: APP_FILTER,
+      useClass: PgExceptionFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
