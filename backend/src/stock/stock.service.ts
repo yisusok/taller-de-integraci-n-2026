@@ -76,7 +76,7 @@ export class StockService implements OnModuleInit {
     @InjectRepository(StockMovement)
     private readonly stockMovementRepository: Repository<StockMovement>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   async onModuleInit(): Promise<void> {
     try {
@@ -98,8 +98,7 @@ export class StockService implements OnModuleInit {
       `);
     } catch (error) {
       this.logger.warn(
-        `No se pudo aplicar el trigger de inmutabilidad de stock_movements: ${
-          error instanceof Error ? error.message : String(error)
+        `No se pudo aplicar el trigger de inmutabilidad de stock_movements: ${error instanceof Error ? error.message : String(error)
         }`,
       );
     }
@@ -179,65 +178,6 @@ export class StockService implements OnModuleInit {
   async getLowStockAlerts(umbral = 5): Promise<LowStockAlertsResponse> {
     const rawThreshold =
       typeof umbral === 'number' && Number.isFinite(umbral) ? umbral : 5;
-    const safeThreshold = Math.max(0, Math.min(Math.floor(rawThreshold), 1000));
-
-    const rawRows = await this.stockMovementRepository
-      .createQueryBuilder('m')
-      .select('m.variante_id', 'variante_id')
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento = '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE 0 END), 0)`,
-        'total_ingresos',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento != '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE 0 END), 0)`,
-        'total_salidas',
-      )
-      .addSelect(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento = '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE -m.cantidad END), 0)`,
-        'existencias_actuales',
-      )
-      .groupBy('m.variante_id')
-      .having(
-        `COALESCE(SUM(CASE WHEN m.tipo_movimiento = '${TipoMovimiento.INGRESO_PROVEEDOR}' THEN m.cantidad ELSE -m.cantidad END), 0) <= :umbral`,
-        { umbral: safeThreshold },
-      )
-      .orderBy('existencias_actuales', 'ASC')
-      .getRawMany<{
-        variante_id: string;
-        total_ingresos: string | number;
-        total_salidas: string | number;
-        existencias_actuales: string | number;
-      }>();
-
-    const criticalCutoff = Math.max(1, Math.floor(safeThreshold / 2));
-
-    const alertas: LowStockAlert[] = rawRows.map((row) => {
-      const stock = Number(row.existencias_actuales);
-      let nivel: NivelAlertaStock = 'bajo';
-      if (stock <= 0) {
-        nivel = 'agotado';
-      } else if (stock <= criticalCutoff) {
-        nivel = 'critico';
-      }
-      return {
-        variante_id: row.variante_id,
-        existencias_actuales: stock,
-        total_ingresos: Number(row.total_ingresos),
-        total_salidas: Number(row.total_salidas),
-        umbral: safeThreshold,
-        nivel,
-      };
-    });
-
-    return {
-      umbral: safeThreshold,
-      total_alertas: alertas.length,
-      alertas,
-    };
-  }
-
-  async getLowStockAlerts(umbral = 5): Promise<LowStockAlertsResponse> {
-    const rawThreshold = typeof umbral === 'number' && Number.isFinite(umbral) ? umbral : 5;
     const safeThreshold = Math.max(0, Math.min(Math.floor(rawThreshold), 1000));
 
     const rawRows = await this.stockMovementRepository
