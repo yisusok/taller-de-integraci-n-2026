@@ -1,8 +1,19 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, QueryRunner } from 'typeorm';
+import {
+  DataSource,
+  FindOptionsWhere,
+  QueryRunner,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { StockMovement } from './entities/stock-movement.entity';
-import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
+import { ManualExtractionDto } from './dto/manual-extraction.dto';
 import { TipoMovimiento } from './enums/tipo-movimiento.enum';
 
 export interface StockSummary {
@@ -12,55 +23,107 @@ export interface StockSummary {
   total_ventas: number;
   total_extracciones_manuales: number;
 }
+export interface RecordMovementInput {
+  variante_id: string;
+  tipo_movimiento: TipoMovimiento;
+  cantidad: number;
+  motivo: string;
+  usuario_id: string | null;
+}
+
+export interface MovementFilters {
+  limit?: number;
+  offset?: number;
+  tipo_movimiento?: TipoMovimiento;
+  variante_id?: string;
+}
+
+interface MovementTotalRow {
+  tipo_movimiento: TipoMovimiento;
+  total: string | number;
+}
+
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 50;
+
+const OUTBOUND_TYPES: ReadonlySet<TipoMovimiento> = new Set([
+  TipoMovimiento.VENTA,
+  TipoMovimiento.EXTRACCION_MANUAL,
+]);
 
 @Injectable()
-export class StockService {
+export class StockService implements OnModuleInit {
+  private readonly logger = new Logger(StockService.name);
+
   constructor(
     @InjectRepository(StockMovement)
     private readonly stockMovementRepository: Repository<StockMovement>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
-  /**
-   * Registra un nuevo movimiento de stock de forma atómica e inmutable.
-   * Prohíbe mutaciones directas sobre existencias: la única forma de cambiar el stock
-   * es agregando un registro a este libro mayor (append-only ledger).
-   */
-  async recordMovement(dto: CreateStockMovementDto): Promise<StockMovement> {
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.dataSource.query(`
+        CREATE OR REPLACE FUNCTION fn_prevent_stock_movement_mutation()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          RAISE EXCEPTION 'Operación prohibida: stock_movements es un libro mayor inmutable (append-only).';
+        END;
+        $$ LANGUAGE plpgsql
+      `);
+      await this.dataSource.query(
+        'DROP TRIGGER IF EXISTS trg_prevent_stock_movement_mutation ON stock_movements',
+      );
+      await this.dataSource.query(`
+        CREATE TRIGGER trg_prevent_stock_movement_mutation
+        BEFORE UPDATE OR DELETE ON stock_movements
+        FOR EACH ROW EXECUTE FUNCTION fn_prevent_stock_movement_mutation()
+      `);
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo aplicar el trigger de inmutabilidad de stock_movements: ${error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  async recordMovement(input: RecordMovementInput): Promise<StockMovement> {
+    if (!Number.isInteger(input.cantidad) || input.cantidad <= 0) {
+      throw new BadRequestException(
+        'La cantidad del movimiento debe ser un número entero mayor a cero.',
+      );
+    }
+
+    const motivo = input.motivo?.trim() ?? '';
+    if (motivo.length === 0) {
+      throw new BadRequestException(
+        'El motivo del movimiento es obligatorio y no puede estar vacío.',
+      );
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Si el movimiento es de salida (VENTA o EXTRACCION_MANUAL), verificamos stock suficiente
-      if (
-        dto.tipo_movimiento === TipoMovimiento.VENTA ||
-        dto.tipo_movimiento === TipoMovimiento.EXTRACCION_MANUAL
-      ) {
-        const currentStock = await this.calculateCurrentStockInTransaction(
+      if (OUTBOUND_TYPES.has(input.tipo_movimiento)) {
+        await this.assertSufficientStock(
           queryRunner,
-          dto.variante_id,
+          input.variante_id,
+          input.cantidad,
         );
-
-        if (currentStock < dto.cantidad) {
-          throw new BadRequestException(
-            `Existencias insuficientes para la variante ${dto.variante_id}. Stock disponible: ${currentStock}, solicitado: ${dto.cantidad}.`,
-          );
-        }
       }
 
       const movement = this.stockMovementRepository.create({
-        variante_id: dto.variante_id,
-        tipo_movimiento: dto.tipo_movimiento,
-        cantidad: dto.cantidad,
-        motivo: dto.motivo,
-        usuario_id: dto.usuario_id ?? null,
+        variante_id: input.variante_id,
+        tipo_movimiento: input.tipo_movimiento,
+        cantidad: input.cantidad,
+        motivo,
+        usuario_id: input.usuario_id,
       });
 
-      const savedMovement = await queryRunner.manager.save(movement);
+      const saved = await queryRunner.manager.save(movement);
       await queryRunner.commitTransaction();
-
-      return savedMovement;
+      return saved;
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -68,39 +131,97 @@ export class StockService {
       await queryRunner.release();
     }
   }
+  async recordManualExtraction(
+    dto: ManualExtractionDto,
+    usuarioId: string,
+  ): Promise<StockMovement> {
+    const responsable = usuarioId?.trim() ?? '';
+    if (responsable.length === 0) {
+      throw new BadRequestException(
+        'Se requiere un usuario administrador autenticado para registrar extracciones manuales.',
+      );
+    }
 
-  /**
-   * Obtiene el resumen de existencias actuales calculado a partir del libro mayor de movimientos.
-   */
-  async getStockSummary(varianteId: string): Promise<StockSummary> {
-    const movements = await this.stockMovementRepository.find({
-      where: { variante_id: varianteId },
-      order: { created_at: 'ASC' },
+    return this.recordMovement({
+      variante_id: dto.variante_id,
+      tipo_movimiento: TipoMovimiento.EXTRACCION_MANUAL,
+      cantidad: dto.cantidad,
+      motivo: dto.motivo,
+      usuario_id: responsable,
     });
+  }
 
-    if (movements.length === 0) {
-      return {
-        variante_id: varianteId,
-        existencias_actuales: 0,
-        total_ingresos: 0,
-        total_ventas: 0,
-        total_extracciones_manuales: 0,
-      };
+  async getStockSummary(varianteId: string): Promise<StockSummary> {
+    return this.aggregateSummary(
+      () => this.stockMovementRepository.createQueryBuilder('m'),
+      varianteId,
+    );
+  }
+
+  async findAllMovements(
+    filters: MovementFilters = {},
+  ): Promise<StockMovement[]> {
+    const {
+      limit = DEFAULT_PAGE_SIZE,
+      offset = 0,
+      tipo_movimiento,
+      variante_id,
+    } = filters;
+
+    const where: FindOptionsWhere<StockMovement> = {};
+    if (tipo_movimiento) {
+      where.tipo_movimiento = tipo_movimiento;
+    }
+    if (variante_id) {
+      where.variante_id = variante_id;
     }
 
-    let ingresos = 0;
-    let ventas = 0;
-    let extracciones = 0;
+    return this.stockMovementRepository.find({
+      where,
+      order: { created_at: 'DESC' },
+      take: Math.min(Math.max(limit, 1), MAX_PAGE_SIZE),
+      skip: Math.max(offset, 0),
+    });
+  }
+  private async assertSufficientStock(
+    queryRunner: QueryRunner,
+    varianteId: string,
+    cantidad: number,
+  ): Promise<void> {
+    await queryRunner.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      varianteId,
+    ]);
 
-    for (const mov of movements) {
-      if (mov.tipo_movimiento === TipoMovimiento.INGRESO_PROVEEDOR) {
-        ingresos += mov.cantidad;
-      } else if (mov.tipo_movimiento === TipoMovimiento.VENTA) {
-        ventas += mov.cantidad;
-      } else if (mov.tipo_movimiento === TipoMovimiento.EXTRACCION_MANUAL) {
-        extracciones += mov.cantidad;
-      }
+    const { existencias_actuales } = await this.aggregateSummary(
+      () => queryRunner.manager.createQueryBuilder(StockMovement, 'm'),
+      varianteId,
+    );
+
+    if (existencias_actuales < cantidad) {
+      throw new BadRequestException(
+        `Existencias insuficientes para la variante ${varianteId}. Stock disponible: ${existencias_actuales}, solicitado: ${cantidad}.`,
+      );
     }
+  }
+  private async aggregateSummary(
+    createQueryBuilder: () => SelectQueryBuilder<StockMovement>,
+    varianteId: string,
+  ): Promise<StockSummary> {
+    const rows = await createQueryBuilder()
+      .select('m.tipo_movimiento', 'tipo_movimiento')
+      .addSelect('COALESCE(SUM(m.cantidad), 0)', 'total')
+      .where('m.variante_id = :varianteId', { varianteId })
+      .groupBy('m.tipo_movimiento')
+      .getRawMany<MovementTotalRow>();
+
+    const totalOf = (tipo: TipoMovimiento): number =>
+      rows
+        .filter((row) => row.tipo_movimiento === tipo)
+        .reduce((acc, row) => acc + Number(row.total), 0);
+
+    const ingresos = totalOf(TipoMovimiento.INGRESO_PROVEEDOR);
+    const ventas = totalOf(TipoMovimiento.VENTA);
+    const extracciones = totalOf(TipoMovimiento.EXTRACCION_MANUAL);
 
     return {
       variante_id: varianteId,
@@ -109,51 +230,5 @@ export class StockService {
       total_ventas: ventas,
       total_extracciones_manuales: extracciones,
     };
-  }
-
-  /**
-   * Consulta el historial completo de movimientos para auditoría.
-   */
-  async getMovementsByVariant(varianteId: string): Promise<StockMovement[]> {
-    return this.stockMovementRepository.find({
-      where: { variante_id: varianteId },
-      order: { created_at: 'DESC' },
-    });
-  }
-
-  /**
-   * Obtiene todos los movimientos recientes del sistema con paginación.
-   */
-  async findAllMovements(limit = 50, offset = 0): Promise<StockMovement[]> {
-    return this.stockMovementRepository.find({
-      order: { created_at: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
-  }
-
-  /**
-   * Cálculo interno de existencias dentro de una transacción activa para prevenir condiciones de carrera.
-   */
-  private async calculateCurrentStockInTransaction(
-    queryRunner: QueryRunner,
-    varianteId: string,
-  ): Promise<number> {
-    const movements: StockMovement[] = await queryRunner.manager.find(
-      StockMovement,
-      {
-        where: { variante_id: varianteId },
-      },
-    );
-
-    let stock = 0;
-    for (const mov of movements) {
-      if (mov.tipo_movimiento === TipoMovimiento.INGRESO_PROVEEDOR) {
-        stock += mov.cantidad;
-      } else {
-        stock -= mov.cantidad;
-      }
-    }
-    return stock;
   }
 }
