@@ -301,6 +301,92 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
     });
   });
 
+  describe('getLowStockAlerts (STOCK-04)', () => {
+    it('obtiene variantes con existencias menores o iguales al umbral y las clasifica por nivel de criticidad', async () => {
+      const mockRawRows = [
+        {
+          variante_id: 'var-agotada',
+          total_ingresos: '10',
+          total_salidas: '10',
+          existencias_actuales: '0',
+        },
+        {
+          variante_id: 'var-critica',
+          total_ingresos: '10',
+          total_salidas: '8',
+          existencias_actuales: '2',
+        },
+        {
+          variante_id: 'var-baja',
+          total_ingresos: '20',
+          total_salidas: '16',
+          existencias_actuales: '4',
+        },
+      ];
+
+      const builder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        having: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue(mockRawRows),
+      };
+      repository.createQueryBuilder.mockReturnValue(builder);
+
+      const result = await service.getLowStockAlerts(5);
+
+      expect(result.umbral).toBe(5);
+      expect(result.total_alertas).toBe(3);
+      expect(result.alertas[0]).toEqual({
+        variante_id: 'var-agotada',
+        existencias_actuales: 0,
+        total_ingresos: 10,
+        total_salidas: 10,
+        umbral: 5,
+        nivel: 'agotado',
+      });
+      expect(result.alertas[1]).toEqual({
+        variante_id: 'var-critica',
+        existencias_actuales: 2,
+        total_ingresos: 10,
+        total_salidas: 8,
+        umbral: 5,
+        nivel: 'critico',
+      });
+      expect(result.alertas[2]).toEqual({
+        variante_id: 'var-baja',
+        existencias_actuales: 4,
+        total_ingresos: 20,
+        total_salidas: 16,
+        umbral: 5,
+        nivel: 'bajo',
+      });
+      expect(builder.having).toHaveBeenCalledWith(
+        expect.stringContaining('<= :umbral'),
+        { umbral: 5 },
+      );
+    });
+
+    it('acota umbrales negativos o fuera de rango a valores seguros', async () => {
+      const builder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        having: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([]),
+      };
+      repository.createQueryBuilder.mockReturnValue(builder);
+
+      const resNeg = await service.getLowStockAlerts(-10);
+      expect(resNeg.umbral).toBe(0);
+
+      const resOverflow = await service.getLowStockAlerts(9999);
+      expect(resOverflow.umbral).toBe(1000);
+    });
+  });
+
   describe('findAllMovements (auditoría)', () => {
     it('aplica paginación por defecto y orden descendente', async () => {
       await service.findAllMovements();

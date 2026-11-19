@@ -14,6 +14,23 @@ export interface StockSummary {
   total_extracciones_manuales: number;
 }
 
+export type NivelAlertaStock = 'agotado' | 'critico' | 'bajo';
+
+export interface LowStockAlert {
+  variante_id: string;
+  existencias_actuales: number;
+  total_ingresos: number;
+  total_salidas: number;
+  umbral: number;
+  nivel: NivelAlertaStock;
+}
+
+export interface LowStockAlertsResponse {
+  umbral: number;
+  total_alertas: number;
+  alertas: LowStockAlert[];
+}
+
 export interface StockMovement {
   id: string;
   variante_id: string;
@@ -136,5 +153,12 @@ export const stockApi = {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  },
+
+  getAlerts(umbral?: number) {
+    const params = new URLSearchParams();
+    if (umbral !== undefined) params.set('umbral', String(umbral));
+    const query = params.toString();
+    return request<LowStockAlertsResponse>(`/stock/alertas${query ? `?${query}` : ''}`);
   },
 };

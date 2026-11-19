@@ -18,6 +18,7 @@ describe('StockController y DTOs de Stock (STOCK-03 & TEST-01)', () => {
     recordManualExtraction: jest.Mock;
     getStockSummary: jest.Mock;
     findAllMovements: jest.Mock;
+    getLowStockAlerts: jest.Mock;
   };
 
   const varianteId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -51,6 +52,20 @@ describe('StockController y DTOs de Stock (STOCK-03 & TEST-01)', () => {
       recordManualExtraction: jest.fn().mockResolvedValue(mockMovement),
       getStockSummary: jest.fn().mockResolvedValue(mockSummary),
       findAllMovements: jest.fn().mockResolvedValue([mockMovement]),
+      getLowStockAlerts: jest.fn().mockResolvedValue({
+        umbral: 5,
+        total_alertas: 1,
+        alertas: [
+          {
+            variante_id: varianteId,
+            existencias_actuales: 2,
+            total_ingresos: 10,
+            total_salidas: 8,
+            umbral: 5,
+            nivel: 'critico',
+          },
+        ],
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -130,11 +145,19 @@ describe('StockController y DTOs de Stock (STOCK-03 & TEST-01)', () => {
     });
   });
 
+  it('GET /stock/alertas → delega al servicio con el umbral especificado', async () => {
+    const result = await controller.getLowStockAlerts(3);
+    expect(service.getLowStockAlerts).toHaveBeenCalledWith(3);
+    expect(result.total_alertas).toBe(1);
+    expect(result.alertas[0].nivel).toBe('critico');
+  });
+
   it('RBAC → todos los endpoints de StockController requieren estrictamente RolUsuario.ADMINISTRADOR', () => {
     const reflector = new Reflector();
     const handlerNames = [
       'createMovement',
       'createManualExtraction',
+      'getLowStockAlerts',
       'getStockSummary',
       'getVariantMovements',
       'listMovements',

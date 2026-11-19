@@ -178,6 +178,35 @@
   color: #a3a9b5;
 }
 
+.admin-nav__item-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-nav__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-family: var(--a-display);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.admin-nav__item--active .admin-nav__badge {
+  background: var(--a-red);
+  color: #ffffff;
+  border-color: var(--a-red);
+}
+
 .admin-nav__tag {
   padding: 1px 8px;
   border-radius: 999px;

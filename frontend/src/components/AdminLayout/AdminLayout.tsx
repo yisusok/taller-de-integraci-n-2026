@@ -6,6 +6,7 @@ export interface AdminNavItem {
   label: string;
   disabled?: boolean;
   tag?: string;
+  badge?: number | string;
 }
 
 export interface AdminNavGroup {
@@ -79,8 +80,13 @@ export function AdminLayout({
                   className={`admin-nav__item ${item.id === activeId ? 'admin-nav__item--active' : ''}`}
                   onClick={() => onSelect(item.id)}
                 >
-                  <span>{item.label}</span>
-                  {item.tag && <span className="admin-nav__tag">{item.tag}</span>}
+                  <div className="admin-nav__item-main">
+                    <span>{item.label}</span>
+                    {item.tag && <span className="admin-nav__tag">{item.tag}</span>}
+                  </div>
+                  {item.badge !== undefined && (
+                    <span className="admin-nav__badge">{item.badge}</span>
+                  )}
                 </button>
               ))}
             </div>

@@ -10,12 +10,13 @@ const PAGE_SIZE = 30;
 type TypeFilter = TipoMovimiento | 'ALL';
 
 interface LedgerSectionProps {
+  initialVarianteId?: string;
   onSelectVariant: (varianteId: string) => void;
 }
 
-export function LedgerSection({ onSelectVariant }: LedgerSectionProps) {
+export function LedgerSection({ initialVarianteId, onSelectVariant }: LedgerSectionProps) {
   const [tipo, setTipo] = useState<TypeFilter>('ALL');
-  const [varianteInput, setVarianteInput] = useState('');
+  const [varianteInput, setVarianteInput] = useState(initialVarianteId ?? '');
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   const varianteId = isUuidV4(varianteInput) ? varianteInput.trim() : undefined;

@@ -11,7 +11,11 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { StockService, StockSummary } from './stock.service';
+import {
+  StockService,
+  StockSummary,
+  LowStockAlertsResponse,
+} from './stock.service';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { ManualExtractionDto } from './dto/manual-extraction.dto';
 import { StockMovement } from './entities/stock-movement.entity';
@@ -25,7 +29,7 @@ import { RolUsuario } from '../users/entities/user.entity';
 
 @Controller('stock')
 export class StockController {
-  constructor(private readonly stockService: StockService) { }
+  constructor(private readonly stockService: StockService) {}
 
   @Post('movimientos')
   @HttpCode(HttpStatus.CREATED)
@@ -51,6 +55,14 @@ export class StockController {
       manualExtractionDto,
       user.id,
     );
+  }
+
+  @Get('alertas')
+  @Roles(RolUsuario.ADMINISTRADOR)
+  async getLowStockAlerts(
+    @Query('umbral', new ParseIntPipe({ optional: true })) umbral?: number,
+  ): Promise<LowStockAlertsResponse> {
+    return this.stockService.getLowStockAlerts(umbral);
   }
 
   @Get('variantes/:varianteId')
