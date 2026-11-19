@@ -1,14 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { StockService } from './stock.service';
 import { StockMovement } from './entities/stock-movement.entity';
+import { Variante } from '../variantes/entities/variante.entity';
 import { TipoMovimiento } from './enums/tipo-movimiento.enum';
 
 type Totals = Partial<Record<TipoMovimiento, number>>;
 
-/** Simula el QueryBuilder de agregación: devuelve un total por tipo de movimiento. */
 const aggregateBuilder = (totals: Totals) => {
   const builder = {
     select: jest.fn().mockReturnThis(),
@@ -18,7 +18,6 @@ const aggregateBuilder = (totals: Totals) => {
     getRawMany: jest.fn().mockResolvedValue(
       Object.entries(totals).map(([tipo_movimiento, total]) => ({
         tipo_movimiento,
-        // Postgres devuelve SUM() como string
         total: String(total),
       })),
     ),
@@ -33,6 +32,9 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
     create: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
+  let varianteRepository: {
+    createQueryBuilder: jest.Mock;
+  };
   let queryRunner: {
     connect: jest.Mock;
     startTransaction: jest.Mock;
@@ -40,14 +42,17 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
     rollbackTransaction: jest.Mock;
     release: jest.Mock;
     query: jest.Mock;
-    manager: { save: jest.Mock; createQueryBuilder: jest.Mock };
+    manager: {
+      findOne: jest.Mock;
+      save: jest.Mock;
+      createQueryBuilder: jest.Mock;
+    };
   };
   let dataSource: { createQueryRunner: jest.Mock; query: jest.Mock };
 
   const varianteId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
   const adminId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
 
-  /** Define el saldo que verá la validación dentro de la transacción. */
   const givenStock = (totals: Totals) => {
     queryRunner.manager.createQueryBuilder.mockReturnValue(
       aggregateBuilder(totals),
@@ -72,6 +77,7 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
       release: jest.fn().mockResolvedValue(undefined),
       query: jest.fn().mockResolvedValue(undefined),
       manager: {
+        findOne: jest.fn().mockResolvedValue({ id: varianteId, activa: true }),
         save: jest.fn().mockImplementation((entity: unknown) => entity),
         createQueryBuilder: jest.fn(),
       },
@@ -85,11 +91,15 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
       create: jest.fn().mockImplementation((entity: unknown) => entity),
       createQueryBuilder: jest.fn(),
     };
+    varianteRepository = {
+      createQueryBuilder: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         StockService,
         { provide: getRepositoryToken(StockMovement), useValue: repository },
+        { provide: getRepositoryToken(Variante), useValue: varianteRepository },
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -103,6 +113,9 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
         baseInput({ motivo: '  Recepción lote 1234  ' }),
       );
 
+      expect(queryRunner.manager.findOne).toHaveBeenCalledWith(Variante, {
+        where: { id: varianteId },
+      });
       expect(repository.create).toHaveBeenCalledWith({
         variante_id: varianteId,
         tipo_movimiento: TipoMovimiento.INGRESO_PROVEEDOR,
@@ -118,7 +131,19 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
       expect(queryRunner.release).toHaveBeenCalledTimes(1);
     });
 
-    it('bloquea la variante y registra una venta cuando hay saldo suficiente', async () => {
+    it('rechaza con NotFoundException y hace rollback si la variante no existe', async () => {
+      queryRunner.manager.findOne.mockResolvedValue(null);
+
+      await expect(service.recordMovement(baseInput())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(queryRunner.manager.save).not.toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).not.toHaveBeenCalled();
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+      expect(queryRunner.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('bloquea la variante con hashtextextended y registra una venta cuando hay saldo suficiente', async () => {
       givenStock({
         [TipoMovimiento.INGRESO_PROVEEDOR]: 20,
         [TipoMovimiento.VENTA]: 8,
@@ -130,7 +155,7 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
       );
 
       expect(queryRunner.query).toHaveBeenCalledWith(
-        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [varianteId],
       );
       expect(queryRunner.commitTransaction).toHaveBeenCalledTimes(1);
@@ -302,66 +327,92 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
   });
 
   describe('getLowStockAlerts (STOCK-04)', () => {
-    it('obtiene variantes con existencias menores o iguales al umbral y las clasifica por nivel de criticidad', async () => {
+    const makeAlertsBuilder = (rows: unknown[]) => ({
+      innerJoin: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      setParameter: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
+      having: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(rows),
+    });
+
+    it('consulta variantes activas con LEFT JOIN al ledger, incluye metadatos y clasifica severidad', async () => {
       const mockRawRows = [
         {
-          variante_id: 'var-agotada',
-          total_ingresos: '10',
-          total_salidas: '10',
+          variante_id: 'var-sin-movs',
+          producto_id: 'prod-1',
+          producto_nombre: 'Runner Pro',
+          producto_sku: 'SNK-RUN-01',
+          talle: '41',
+          color: 'Negro',
+          sku_variante: 'SNK-RUN-01-NEGRO-41',
+          total_ingresos: '0',
+          total_salidas: '0',
           existencias_actuales: '0',
         },
         {
           variante_id: 'var-critica',
+          producto_id: 'prod-2',
+          producto_nombre: 'Basket Air',
+          producto_sku: 'SNK-BSK-02',
+          talle: '42',
+          color: 'Rojo',
+          sku_variante: 'SNK-BSK-02-ROJO-42',
           total_ingresos: '10',
           total_salidas: '8',
           existencias_actuales: '2',
         },
         {
           variante_id: 'var-baja',
+          producto_id: 'prod-3',
+          producto_nombre: 'Urban Lite',
+          producto_sku: 'SNK-URB-03',
+          talle: '39',
+          color: 'Blanco',
+          sku_variante: 'SNK-URB-03-BLANCO-39',
           total_ingresos: '20',
           total_salidas: '16',
           existencias_actuales: '4',
         },
       ];
 
-      const builder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        having: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue(mockRawRows),
-      };
-      repository.createQueryBuilder.mockReturnValue(builder);
+      const builder = makeAlertsBuilder(mockRawRows);
+      varianteRepository.createQueryBuilder.mockReturnValue(builder);
 
       const result = await service.getLowStockAlerts(5);
 
       expect(result.umbral).toBe(5);
       expect(result.total_alertas).toBe(3);
+      expect(builder.where).toHaveBeenCalledWith(
+        'v.activa = :varActiva AND p.activo = :prodActivo',
+        { varActiva: true, prodActivo: true },
+      );
+      expect(builder.setParameter).toHaveBeenCalledWith(
+        'ingreso',
+        TipoMovimiento.INGRESO_PROVEEDOR,
+      );
       expect(result.alertas[0]).toEqual({
-        variante_id: 'var-agotada',
+        variante_id: 'var-sin-movs',
+        producto_id: 'prod-1',
+        producto_nombre: 'Runner Pro',
+        producto_sku: 'SNK-RUN-01',
+        talle: '41',
+        color: 'Negro',
+        sku_variante: 'SNK-RUN-01-NEGRO-41',
         existencias_actuales: 0,
-        total_ingresos: 10,
-        total_salidas: 10,
+        total_ingresos: 0,
+        total_salidas: 0,
         umbral: 5,
         nivel: 'agotado',
       });
-      expect(result.alertas[1]).toEqual({
-        variante_id: 'var-critica',
-        existencias_actuales: 2,
-        total_ingresos: 10,
-        total_salidas: 8,
-        umbral: 5,
-        nivel: 'critico',
-      });
-      expect(result.alertas[2]).toEqual({
-        variante_id: 'var-baja',
-        existencias_actuales: 4,
-        total_ingresos: 20,
-        total_salidas: 16,
-        umbral: 5,
-        nivel: 'bajo',
-      });
+      expect(result.alertas[1].nivel).toBe('critico');
+      expect(result.alertas[2].nivel).toBe('bajo');
       expect(builder.having).toHaveBeenCalledWith(
         expect.stringContaining('<= :umbral'),
         { umbral: 5 },
@@ -369,21 +420,64 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
     });
 
     it('acota umbrales negativos o fuera de rango a valores seguros', async () => {
-      const builder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        having: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([]),
-      };
-      repository.createQueryBuilder.mockReturnValue(builder);
+      const builder = makeAlertsBuilder([]);
+      varianteRepository.createQueryBuilder.mockReturnValue(builder);
 
       const resNeg = await service.getLowStockAlerts(-10);
       expect(resNeg.umbral).toBe(0);
 
       const resOverflow = await service.getLowStockAlerts(9999);
       expect(resOverflow.umbral).toBe(1000);
+    });
+  });
+
+  describe('getStockByVariants & hasMovements (integración catálogo)', () => {
+    it('getStockByVariants retorna Map vacío sin consultar la base si recibe arreglo vacío', async () => {
+      const map = await service.getStockByVariants([]);
+      expect(map.size).toBe(0);
+      expect(repository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('getStockByVariants deduplica IDs y retorna el saldo calculado por variante en una sola query parametrizada', async () => {
+      const builder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        setParameter: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([
+          { variante_id: 'v-1', existencias_actuales: '12' },
+          { variante_id: 'v-2', existencias_actuales: '0' },
+        ]),
+      };
+      repository.createQueryBuilder.mockReturnValue(builder);
+
+      const map = await service.getStockByVariants(['v-1', 'v-2', 'v-1']);
+
+      expect(builder.where).toHaveBeenCalledWith('m.variante_id IN (:...ids)', {
+        ids: ['v-1', 'v-2'],
+      });
+      expect(builder.setParameter).toHaveBeenCalledWith(
+        'ingreso',
+        TipoMovimiento.INGRESO_PROVEEDOR,
+      );
+      expect(map.get('v-1')).toBe(12);
+      expect(map.get('v-2')).toBe(0);
+      expect(map.size).toBe(2);
+    });
+
+    it('hasMovements devuelve false para lista vacía o conteo 0 y true cuando hay movimientos', async () => {
+      expect(await service.hasMovements([])).toBe(false);
+      expect(repository.createQueryBuilder).not.toHaveBeenCalled();
+
+      const builder = {
+        where: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValueOnce(3).mockResolvedValueOnce(0),
+      };
+      repository.createQueryBuilder.mockReturnValue(builder);
+
+      expect(await service.hasMovements(['v-1'])).toBe(true);
+      expect(await service.hasMovements(['v-1'])).toBe(false);
     });
   });
 
@@ -438,17 +532,16 @@ describe('StockService (motor de eventos de inventario — TEST-01)', () => {
       expect(() => movement.preventRemove()).toThrow(/inmutables/);
     });
 
-    it('al iniciar el módulo instala el trigger que bloquea UPDATE/DELETE en la base', async () => {
+    it('al iniciar el módulo instala atómicamente el trigger que bloquea UPDATE/DELETE', async () => {
       await service.onModuleInit();
 
       const statements = (dataSource.query.mock.calls as unknown[][]).map(
         ([sql]) => String(sql),
       );
-      expect(statements).toHaveLength(3);
-      expect(statements.join(' ')).toContain(
-        'fn_prevent_stock_movement_mutation',
-      );
-      expect(statements[2]).toContain('BEFORE UPDATE OR DELETE');
+      expect(statements).toHaveLength(2);
+      expect(statements[0]).toContain('fn_prevent_stock_movement_mutation');
+      expect(statements[1]).toContain('CREATE OR REPLACE TRIGGER');
+      expect(statements[1]).toContain('BEFORE UPDATE OR DELETE');
     });
 
     it('no interrumpe el arranque si no puede instalar el trigger', async () => {
