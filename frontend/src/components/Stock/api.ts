@@ -18,6 +18,12 @@ export type NivelAlertaStock = 'agotado' | 'critico' | 'bajo';
 
 export interface LowStockAlert {
   variante_id: string;
+  producto_id?: string;
+  producto_nombre?: string;
+  producto_sku?: string;
+  talle?: string;
+  color?: string;
+  sku_variante?: string;
   existencias_actuales: number;
   total_ingresos: number;
   total_salidas: number;
@@ -104,7 +110,7 @@ const messageFromPayload = (payload: unknown): string | null => {
   return null;
 };
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('access_token');
 
   let response: Response;
@@ -152,6 +158,16 @@ export const stockApi = {
     return request<StockMovement>('/stock/extracciones-manuales', {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  },
+
+  registerSupplierEntry(input: { variante_id: string; cantidad: number; motivo: string }) {
+    return request<StockMovement>('/stock/movimientos', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...input,
+        tipo_movimiento: 'INGRESO_PROVEEDOR',
+      }),
     });
   },
 

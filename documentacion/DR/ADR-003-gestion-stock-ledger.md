@@ -57,17 +57,18 @@ Se crea la tabla `stock_movements` con los siguientes campos:
 ## 4. Extracción manual y garantías de integridad (STOCK-02 / STOCK-03)
 
 * **Endpoint dedicado:** `POST /api/stock/extracciones-manuales` (solo `administrador`) fuerza `EXTRACCION_MANUAL` y exige `variante_id`, `cantidad` entera > 0 y `motivo` (mínimo 5 caracteres).
-* **Auditoría no falsificable:** `usuario_id` nunca viaja en el cuerpo de la petición; se toma siempre del token JWT.
+* **Auditoría no falsificable:** `usuario_id` nunca viaja en el cuerpo de la petición; se toma siempre del token JWT y referencia a `users(id)` (`ON DELETE SET NULL`).
+* **Integridad referencial real:** `variante_id` posee clave foránea hacia `variantes(id)` (`ON DELETE RESTRICT`) y check `cantidad > 0`; adicionalmente `recordMovement` verifica dentro de la transacción la existencia de la variante.
 * **Saldo calculado en SQL:** `GET /api/stock/variantes/:id` agrega los totales por tipo con `SUM ... GROUP BY`, en lugar de cargar el historial en memoria.
-* **Sin sobreventa por concurrencia:** las salidas (`VENTA` y `EXTRACCION_MANUAL`) toman un `pg_advisory_xact_lock` por variante dentro de la transacción antes de validar el saldo.
-* **Inmutabilidad real en la base:** al iniciar el módulo se instala de forma idempotente el trigger `trg_prevent_stock_movement_mutation`, de modo que no depende de ejecutar el script SQL a mano cuando el esquema lo crea TypeORM (`synchronize`).
+* **Sin sobreventa por concurrencia:** las salidas (`VENTA` y `EXTRACCION_MANUAL`) toman un bloqueo transaccional de 64 bits `pg_advisory_xact_lock(hashtextextended($1, 0))` por variante antes de validar el saldo.
+* **Inmutabilidad real y atómica en la base:** al iniciar el módulo se instala de forma atómica el trigger mediante `CREATE OR REPLACE TRIGGER trg_prevent_stock_movement_mutation` y los errores de PostgreSQL (`23505`, `23503`, `23514`, `22003`, `22P02`, `P0001`) se traducen en `PgExceptionFilter`.
 * **Consulta del historial:** `GET /api/stock/movimientos` admite `limit`, `offset`, `tipo_movimiento` y `variante_id`.
 
 ---
 
 ## 5. Alertas de stock bajo y monitoreo de reposición (STOCK-04)
 
-* **Consulta agregada en SQL con cláusula `HAVING`:** `GET /api/stock/alertas?umbral=N` calcula existencias consolidadas por variante agrupando el libro mayor en tiempo real (`GROUP BY m.variante_id HAVING existencias <= :umbral`), evitando cálculos iterativos en memoria o lecturas completas de la tabla.
+* **Consulta agregada desde variantes activas:** `GET /api/stock/alertas?umbral=N` parte desde `variantes v INNER JOIN productos p` activas con `LEFT JOIN stock_movements m ... GROUP BY v.id, p.id HAVING existencias <= :umbral` e incluye metadatos del producto y variante (`producto_nombre`, `producto_sku`, `talle`, `color`, `sku_variante`). Esto garantiza detectar incluso variantes recién creadas sin movimientos previos (`stock = 0`) y excluir productos/variantes desactivados.
 * **Clasificación por severidad:**
   * `agotado`: existencias $\le 0$ unidades (quiebre de inventario total).
   * `critico`: existencias $\le \lfloor\text{umbral} / 2\rfloor$ (riesgo inminente).

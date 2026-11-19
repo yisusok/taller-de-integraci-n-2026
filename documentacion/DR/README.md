@@ -68,3 +68,4 @@ Explicación clara de la alternativa elegida y la justificación técnica que fu
 | [ADR-004](./ADR-004-autenticacion-local-y-registro.md) | Autenticación Local, Saneamiento de Entradas y Manejo de Errores (AUTH-02) | 2026-10-21 | Aceptado |
 | [ADR-005](./ADR-005-middleware-proteccion-control-acceso.md) | Middleware de Protección, Control de Acceso (RBAC) y Seguridad en Rutas (AUTH-05) | 2026-10-29 | Aceptado |
 | [ADR-006](./ADR-006-libreta-direcciones-envio.md) | Libreta de Direcciones de Envío con Límite de 3 Domicilios y Gestión de Predeterminada (AUTH-06) | 2026-10-29 | Aceptado |
+| [ADR-007](./ADR-007-catalogo-productos-variantes-categorias.md) | Catálogo de Productos, Variantes y Categorías Integrado al Libro Mayor de Stock (CAT-01) | 2026-11-19 | Aceptado |

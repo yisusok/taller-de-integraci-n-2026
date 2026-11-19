@@ -23,28 +23,41 @@ export function AlertsSection({
   onAlertCountChange,
 }: AlertsSectionProps) {
   const [threshold, setThreshold] = useState<number>(5);
+  const [reloadKey, setReloadKey] = useState(0);
   const [data, setData] = useState<LowStockAlertsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const fetchAlerts = async (targetThreshold: number) => {
+  useEffect(() => {
+    let ignore = false;
+    stockApi
+      .getAlerts(threshold)
+      .then((response) => {
+        if (ignore) return;
+        setData(response);
+        setError(null);
+        onAlertCountChange?.(response.total_alertas);
+      })
+      .catch((err: unknown) => {
+        if (ignore) return;
+        setError(err instanceof Error ? err.message : 'No se pudieron cargar las alertas de stock.');
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [threshold, reloadKey, onAlertCountChange]);
+
+  const triggerReload = (nextThreshold: number) => {
     setLoading(true);
     setError(null);
-    try {
-      const response = await stockApi.getAlerts(targetThreshold);
-      setData(response);
-      onAlertCountChange?.(response.total_alertas);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron cargar las alertas de stock.');
-    } finally {
-      setLoading(false);
-    }
+    setThreshold(nextThreshold);
+    setReloadKey((k) => k + 1);
   };
-
-  useEffect(() => {
-    void fetchAlerts(threshold);
-  }, [threshold]);
 
   const handleCopy = async (id: string) => {
     try {
@@ -59,14 +72,13 @@ export function AlertsSection({
     data?.alertas.filter((a) => a.nivel === level).length ?? 0;
 
   return (
-    <div className="stock-view">
+    <div className="admin-stack">
       <AdminPageHeading
-        eyebrow="INVENTARIO CRÍTICO"
+        eyebrow="Administración / Inventario"
         title="Alertas de stock bajo"
         subtitle="Monitoreo de variantes con existencias agotadas o próximas al punto de reposición."
       />
 
-      {/* Barra de umbral y acciones */}
       <section className="admin-panel stock-alerts-toolbar">
         <div className="stock-alerts-toolbar__left">
           <span className="stock-alerts-toolbar__label">Umbral de reposición:</span>
@@ -76,7 +88,7 @@ export function AlertsSection({
                 key={opt}
                 type="button"
                 className={`stock-threshold-pill ${threshold === opt ? 'stock-threshold-pill--active' : ''}`}
-                onClick={() => setThreshold(opt)}
+                onClick={() => triggerReload(opt)}
               >
                 ≤ {opt} un.
               </button>
@@ -86,15 +98,14 @@ export function AlertsSection({
 
         <button
           type="button"
-          className="admin-button admin-button--secondary stock-alerts-refresh"
-          onClick={() => void fetchAlerts(threshold)}
+          className="admin-btn admin-btn--secondary stock-alerts-refresh"
+          onClick={() => triggerReload(threshold)}
           disabled={loading}
         >
           {loading ? 'Actualizando…' : '↻ Actualizar'}
         </button>
       </section>
 
-      {/* Tarjetas de métricas de alerta */}
       {data && (
         <div className="stock-metrics-grid">
           <div className="stock-metric-card">
@@ -132,12 +143,11 @@ export function AlertsSection({
       )}
 
       {error && (
-        <div className="stock-feedback stock-feedback--error" role="alert">
+        <div className="admin-alert admin-alert--error" role="alert">
           {error}
         </div>
       )}
 
-      {/* Lista de alertas */}
       <section className="admin-panel">
         <h2 className="admin-panel__title">Variantes que requieren atención</h2>
         <p className="admin-panel__helper">
@@ -145,11 +155,11 @@ export function AlertsSection({
         </p>
 
         {loading && !data && (
-          <div className="stock-empty">Consultando alertas de inventario…</div>
+          <div className="admin-empty">Consultando alertas de inventario…</div>
         )}
 
         {data && data.alertas.length === 0 && (
-          <div className="stock-empty stock-alerts-empty">
+          <div className="stock-alerts-empty">
             <div className="stock-alerts-empty__icon">✓</div>
             <p className="stock-alerts-empty__title">Sin alertas de stock bajo</p>
             <p className="stock-alerts-empty__desc">
@@ -184,6 +194,19 @@ export function AlertsSection({
                   </div>
 
                   <div className="stock-alert-item__body">
+                    {item.producto_nombre && (
+                      <div className="stock-alert-item__id-row">
+                        <strong>{item.producto_nombre}</strong>
+                        {(item.talle || item.color) && (
+                          <span>
+                            · Talle {item.talle ?? '—'} · {item.color ?? ''}
+                          </span>
+                        )}
+                        {item.sku_variante && (
+                          <code className="stock-alert-item__code">{item.sku_variante}</code>
+                        )}
+                      </div>
+                    )}
                     <div className="stock-alert-item__id-row">
                       <span className="stock-alert-item__id-label">Variante ID:</span>
                       <code className="stock-alert-item__code">{item.variante_id}</code>
@@ -207,14 +230,14 @@ export function AlertsSection({
                   <div className="stock-alert-item__actions">
                     <button
                       type="button"
-                      className="admin-button admin-button--secondary stock-alert-btn"
+                      className="admin-btn admin-btn--secondary stock-alert-btn"
                       onClick={() => onSelectLedger(item.variante_id)}
                     >
                       Ver libro mayor
                     </button>
                     <button
                       type="button"
-                      className="admin-button admin-button--primary stock-alert-btn"
+                      className="admin-btn admin-btn--primary stock-alert-btn"
                       onClick={() => onSelectExtraction(item.variante_id)}
                       disabled={item.existencias_actuales <= 0}
                     >

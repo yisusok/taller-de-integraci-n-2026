@@ -90,7 +90,7 @@ export class StockService implements OnModuleInit {
     @InjectRepository(Variante)
     private readonly varianteRepository: Repository<Variante>,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async onModuleInit(): Promise<void> {
     try {
@@ -109,7 +109,8 @@ export class StockService implements OnModuleInit {
       `);
     } catch (error) {
       this.logger.warn(
-        `No se pudo aplicar el trigger de inmutabilidad de stock_movements: ${error instanceof Error ? error.message : String(error)
+        `No se pudo aplicar el trigger de inmutabilidad de stock_movements: ${
+          error instanceof Error ? error.message : String(error)
         }`,
       );
     }
