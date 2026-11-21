@@ -15,6 +15,7 @@ import { StockModule } from './stock/stock.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { ProveedoresModule } from './proveedores/proveedores.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
     AuthModule,
     StockModule,
     AddressesModule,
+    ProveedoresModule,
   ],
   controllers: [AppController],
   providers: [
