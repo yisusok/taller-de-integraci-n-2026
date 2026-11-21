@@ -25,9 +25,10 @@ const messageOf = (error: unknown, fallback: string): string =>
 interface ExtractionSectionProps {
   initialVarianteId?: string;
   onOpenLedger: () => void;
+  onStockMutated?: () => void;
 }
 
-export function ExtractionSection({ initialVarianteId, onOpenLedger }: ExtractionSectionProps) {
+export function ExtractionSection({ initialVarianteId, onOpenLedger, onStockMutated }: ExtractionSectionProps) {
   const [varianteId, setVarianteId] = useState(initialVarianteId ?? '');
   const [cantidad, setCantidad] = useState('1');
   const [motivo, setMotivo] = useState('');
@@ -118,6 +119,7 @@ export function ExtractionSection({ initialVarianteId, onOpenLedger }: Extractio
       setCantidad('1');
       setMotivo('');
       recent.reload();
+      onStockMutated?.();
       await runLookup(varianteId);
     } catch (error) {
       setFormError(messageOf(error, 'No se pudo registrar la extracción.'));

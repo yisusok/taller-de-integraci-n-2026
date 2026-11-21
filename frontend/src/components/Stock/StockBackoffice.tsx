@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AdminLayout } from '../AdminLayout/AdminLayout';
 import type { AdminNavGroup } from '../AdminLayout/AdminLayout';
 import { ExtractionSection } from './ExtractionSection';
 import { LedgerSection } from './LedgerSection';
 import { AlertsSection } from './AlertsSection';
+import { ProductsSection } from '../Catalog/ProductsSection';
+import { CategoriesSection } from '../Catalog/CategoriesSection';
 import { stockApi } from './api';
 import './Stock.css';
 
@@ -19,7 +21,7 @@ interface StockBackofficeProps {
   onLogout: () => void;
 }
 
-type SectionId = 'extraccion' | 'historial' | 'alertas';
+type SectionId = 'extraccion' | 'historial' | 'alertas' | 'productos' | 'categorias';
 
 export function StockBackoffice({
   activeUser,
@@ -34,15 +36,17 @@ export function StockBackoffice({
 
   const isAdmin = activeUser?.rol === 'administrador';
 
-  useEffect(() => {
+  const refreshAlertCount = useCallback(() => {
     if (!isAdmin) return;
     stockApi
       .getAlerts()
       .then((res) => setAlertCount(res.total_alertas))
-      .catch(() => {
-        // Silencioso si aún no hay backend o sin conexión
-      });
+      .catch(() => {});
   }, [isAdmin]);
+
+  useEffect(() => {
+    refreshAlertCount();
+  }, [refreshAlertCount]);
 
   const navGroups: AdminNavGroup[] = [
     {
@@ -60,9 +64,9 @@ export function StockBackoffice({
     {
       label: 'Catálogo',
       items: [
-        { id: 'productos', label: 'Productos', disabled: true, tag: 'Próximamente' },
+        { id: 'productos', label: 'Productos' },
+        { id: 'categorias', label: 'Categorías' },
         { id: 'combos', label: 'Combos y promociones', disabled: true, tag: 'Próximamente' },
-        { id: 'categorias', label: 'Categorías y marcas', disabled: true, tag: 'Próximamente' },
       ],
     },
   ];
@@ -92,10 +96,10 @@ export function StockBackoffice({
       onGoToStore={onGoToStore}
       onLogout={activeUser ? onLogout : undefined}
       onLogin={onGoToLogin}
-      sidebarNote="Acceso restringido a personal autorizado. Gestioná el inventario desde este panel."
+      sidebarNote="Acceso restringido a personal autorizado. Gestioná el catálogo e inventario desde este panel."
       footerLines={[
         '© 2026 Calzado Deportivo · Panel de administración',
-        'Gestión de inventario y alertas de reposición',
+        'Catálogo, inventario y alertas de reposición',
       ]}
     >
       {!isAdmin ? (
@@ -123,6 +127,7 @@ export function StockBackoffice({
           key={prefill?.nonce ?? 'initial'}
           initialVarianteId={prefill?.varianteId}
           onOpenLedger={() => setSection('historial')}
+          onStockMutated={refreshAlertCount}
         />
       ) : section === 'historial' ? (
         <LedgerSection
@@ -130,12 +135,21 @@ export function StockBackoffice({
           initialVarianteId={ledgerPrefill?.varianteId}
           onSelectVariant={openExtractionFor}
         />
-      ) : (
+      ) : section === 'alertas' ? (
         <AlertsSection
           onSelectExtraction={openExtractionFor}
           onSelectLedger={openLedgerFor}
           onAlertCountChange={setAlertCount}
         />
+      ) : section === 'productos' ? (
+        <ProductsSection
+          onOpenExtraction={openExtractionFor}
+          onOpenLedger={openLedgerFor}
+          onGoToCategories={() => setSection('categorias')}
+          onStockMutated={refreshAlertCount}
+        />
+      ) : (
+        <CategoriesSection />
       )}
     </AdminLayout>
   );
