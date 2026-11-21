@@ -5,43 +5,66 @@ import {
   Body,
   Param,
   Query,
+  ParseEnumPipe,
   ParseUUIDPipe,
   ParseIntPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { StockService, StockSummary } from './stock.service';
+import {
+  StockService,
+  StockSummary,
+  LowStockAlertsResponse,
+} from './stock.service';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
+import { ManualExtractionDto } from './dto/manual-extraction.dto';
 import { StockMovement } from './entities/stock-movement.entity';
+import { TipoMovimiento } from './enums/tipo-movimiento.enum';
 import { Roles } from '../auth/decorators/roles.decorator';
+import {
+  CurrentUser,
+  UserFromToken,
+} from '../auth/decorators/current-user.decorator';
 import { RolUsuario } from '../users/entities/user.entity';
 
-/**
- * Rutas de Backoffice / Gestión de Stock protegidas con RBAC:
- * - Operaciones restringidas exclusivamente al rol: administrador
- * - Usuarios con rol 'cliente' o 'visitante' (y anónimos) tienen el acceso bloqueado (HTTP 403 Forbidden).
- */
 @Controller('stock')
 export class StockController {
   constructor(private readonly stockService: StockService) {}
 
-  /**
-   * Endpoint para registrar un movimiento de stock.
-   * Restringido exclusivamente al 'administrador'.
-   */
   @Post('movimientos')
   @HttpCode(HttpStatus.CREATED)
   @Roles(RolUsuario.ADMINISTRADOR)
   async createMovement(
     @Body() createStockMovementDto: CreateStockMovementDto,
+    @CurrentUser() user: UserFromToken,
   ): Promise<StockMovement> {
-    return this.stockService.recordMovement(createStockMovementDto);
+    return this.stockService.recordMovement({
+      ...createStockMovementDto,
+      usuario_id: user.id,
+    });
   }
 
-  /**
-   * Obtiene el resumen y existencias actuales de una variante.
-   * Restringido a 'administrador'.
-   */
+  @Post('extracciones-manuales')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(RolUsuario.ADMINISTRADOR)
+  async createManualExtraction(
+    @Body() manualExtractionDto: ManualExtractionDto,
+    @CurrentUser() user: UserFromToken,
+  ): Promise<StockMovement> {
+    return this.stockService.recordManualExtraction(
+      manualExtractionDto,
+      user.id,
+    );
+  }
+
+  @Get('alertas')
+  @Roles(RolUsuario.ADMINISTRADOR)
+  async getLowStockAlerts(
+    @Query('umbral', new ParseIntPipe({ optional: true })) umbral?: number,
+  ): Promise<LowStockAlertsResponse> {
+    return this.stockService.getLowStockAlerts(umbral);
+  }
+
   @Get('variantes/:varianteId')
   @Roles(RolUsuario.ADMINISTRADOR)
   async getStockSummary(
@@ -50,30 +73,35 @@ export class StockController {
   ): Promise<StockSummary> {
     return this.stockService.getStockSummary(varianteId);
   }
-
-  /**
-   * Obtiene el historial de auditoría de movimientos para una variante.
-   * Restringido a 'administrador'.
-   */
   @Get('variantes/:varianteId/movimientos')
   @Roles(RolUsuario.ADMINISTRADOR)
   async getVariantMovements(
     @Param('varianteId', new ParseUUIDPipe({ version: '4' }))
     varianteId: string,
   ): Promise<StockMovement[]> {
-    return this.stockService.getMovementsByVariant(varianteId);
+    return this.stockService.findAllMovements({
+      variante_id: varianteId,
+      limit: 200,
+    });
   }
-
-  /**
-   * Lista los movimientos de stock más recientes del sistema.
-   * Restringido a 'administrador'.
-   */
   @Get('movimientos')
   @Roles(RolUsuario.ADMINISTRADOR)
   async listMovements(
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
     @Query('offset', new ParseIntPipe({ optional: true })) offset?: number,
+    @Query(
+      'tipo_movimiento',
+      new ParseEnumPipe(TipoMovimiento, { optional: true }),
+    )
+    tipoMovimiento?: TipoMovimiento,
+    @Query('variante_id', new ParseUUIDPipe({ version: '4', optional: true }))
+    varianteId?: string,
   ): Promise<StockMovement[]> {
-    return this.stockService.findAllMovements(limit ?? 50, offset ?? 0);
+    return this.stockService.findAllMovements({
+      limit,
+      offset,
+      tipo_movimiento: tipoMovimiento,
+      variante_id: varianteId,
+    });
   }
 }

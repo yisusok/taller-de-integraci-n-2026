@@ -2,7 +2,6 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsPositive,
   IsString,
   IsUUID,
@@ -27,8 +26,4 @@ export class CreateStockMovementDto {
   @IsString({ message: 'motivo debe ser un texto' })
   @IsNotEmpty({ message: 'motivo no puede estar vacío' })
   motivo: string;
-
-  @IsUUID('4', { message: 'usuario_id debe ser un UUID válido' })
-  @IsOptional()
-  usuario_id?: string;
 }

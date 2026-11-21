@@ -5,6 +5,7 @@ import { LoginForm } from './components/Login/LoginForm'
 import { RegisterForm } from './components/Register/RegisterForm'
 import { ResetPasswordForm } from './components/ResetPassword/ResetPasswordForm'
 import { AddressBook } from './components/AddressBook/AddressBook'
+import { StockBackoffice } from './components/Stock/StockBackoffice'
 
 interface UserSession {
   id?: string
@@ -132,9 +133,6 @@ export default function App() {
     return []
   })
 
-  // Estado de movimientos para prueba de Backoffice
-  const [backofficeLog, setBackofficeLog] = useState<string | null>(null)
-
   // Sincronización automática de OAuth con el backend al iniciar sesión
   useEffect(() => {
     if (isAuthenticated && user?.email) {
@@ -250,33 +248,21 @@ export default function App() {
     setActiveTab('store')
   }
 
-  const handleTestBackofficeAccess = async () => {
-    setBackofficeLog('Consultando API protegida /api/stock/movimientos...')
-    const defaultApiUrl =
-      (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/api\/?$/, '') ||
-      'http://localhost:3000'
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
-
-    try {
-      const res = await fetch(`${defaultApiUrl}/stock/movimientos`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      })
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        setBackofficeLog(
-          `⛔ Acceso Denegado (HTTP ${res.status}): ${
-            errorData.message || 'No autorizado para rutas de backoffice.'
-          }`,
-        )
-      } else {
-        const data = await res.json()
-        setBackofficeLog(`✅ Acceso Autorizado (HTTP 200). Movimientos: ${data.length}`)
-      }
-    } catch {
-      setBackofficeLog('⛔ Error de conexión con el backend.')
-    }
+  if (activeTab === 'backoffice') {
+    return (
+      <StockBackoffice
+        activeUser={activeUser}
+        onGoToStore={() => {
+          setAuthPromptMessage(null)
+          setActiveTab('store')
+        }}
+        onGoToLogin={() => {
+          setAuthPromptMessage(null)
+          setActiveTab('login')
+        }}
+        onLogout={handleLogout}
+      />
+    )
   }
 
   return (
@@ -343,12 +329,7 @@ export default function App() {
               setAuthPromptMessage(null)
               setActiveTab('backoffice')
             }}
-            style={{
-              padding: '0.4rem 0.8rem',
-              fontSize: '0.85rem',
-              borderColor: activeTab === 'backoffice' ? '#6366f1' : undefined,
-              color: activeTab === 'backoffice' ? '#818cf8' : undefined,
-            }}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
           >
             🛡️ Backoffice
           </button>
@@ -518,71 +499,8 @@ export default function App() {
         </>
       )}
 
-      {/* Vista de Control de Acceso al Backoffice */}
-      {activeTab === 'backoffice' && (
-        <div style={{ margin: '2rem auto', maxWidth: '640px', padding: '0 1rem' }}>
-          <div className="auth-clean-wrapper">
-            <div className="auth-clean-header" style={{ marginBottom: '1.5rem' }}>
-              <span
-                className="auth-clean-tag"
-                style={{ background: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca' }}
-              >
-                🛡️ Control de Acceso RBAC
-              </span>
-              <h2 className="auth-clean-title">Módulo de Backoffice (Stock)</h2>
-              <p className="auth-clean-subtitle">
-                Acceso restringido exclusivamente al rol: <strong>administrador</strong>
-              </p>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem', lineHeight: '1.6', fontSize: '0.9rem' }}>
-              <p>
-                <strong>Estado de sesión: </strong>
-                {activeUser ? (
-                  <span style={{ color: '#10b981', fontWeight: 600 }}>
-                    {activeUser.nombre} (Rol: {activeUser.rol || 'cliente'})
-                  </span>
-                ) : (
-                  <span style={{ color: '#ef4444', fontWeight: 600 }}>Visitante Anónimo (Sin autenticar)</span>
-                )}
-              </p>
-              <p style={{ marginTop: '0.5rem', color: '#6b7280' }}>
-                Este panel interactúa directamente con los endpoints del backend protegidos con{' '}
-                <code>JwtAuthGuard</code> y <code>RolesGuard</code>. Si el rol no está autorizado, la petición será
-                rechazada con HTTP 403 Forbidden.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleTestBackofficeAccess}
-              className="clean-submit-btn"
-              style={{ background: '#4f46e5', marginBottom: '1rem' }}
-            >
-              Probar Petición a /api/stock/movimientos
-            </button>
-
-            {backofficeLog && (
-              <div
-                style={{
-                  background: '#111827',
-                  color: '#e5e7eb',
-                  padding: '1rem',
-                  borderRadius: '6px',
-                  fontFamily: 'monospace',
-                  fontSize: '0.85rem',
-                  whiteSpace: 'pre-wrap',
-                }}
-              >
-                {backofficeLog}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Vistas de Autenticación y Perfil */}
-      {activeTab !== 'store' && activeTab !== 'backoffice' && (
+      {activeTab !== 'store' && (
         <div style={{ margin: '2rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {activeUser ? (
             <div className="auth-clean-wrapper" id="profile-card">
