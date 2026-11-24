@@ -57,14 +57,15 @@ import { RolesGuard } from './auth/guards/roles.guard';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: RolesGuard,
-    },
+ {
+   provide: APP_GUARD,
+   useClass: JwtAuthGuard,
+ },
+ {
+   provide: APP_GUARD,
+   useClass: RolesGuard,
+ },
+
   ],
 })
 export class AppModule {}

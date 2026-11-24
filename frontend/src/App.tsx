@@ -5,6 +5,7 @@ import { LoginForm } from './components/Login/LoginForm'
 import { RegisterForm } from './components/Register/RegisterForm'
 import { ResetPasswordForm } from './components/ResetPassword/ResetPasswordForm'
 import { AddressBook } from './components/AddressBook/AddressBook'
+import { AdminProductForm } from './components/AdminProducts/AdminProductForm';
 
 interface UserSession {
   id?: string
@@ -423,6 +424,9 @@ export default function App() {
         </div>
       </nav>
 
+      <AdminProductForm />
+      
+      
       {/* Vista de Catálogo Principal (Storefront) - Navegación anónima permitida */}
       {activeTab === 'store' && (
         <>

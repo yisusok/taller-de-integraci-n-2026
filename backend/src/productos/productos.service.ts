@@ -1,27 +1,68 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateProductoDto } from './dto/create-producto.dto';
 import { UpdateProductoDto } from './dto/update-producto.dto';
+import { Producto } from './entities/producto.entity';
 
 @Injectable()
 export class ProductosService {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  create(createProductoDto: CreateProductoDto) {
-    return 'This action adds a new producto';
+  constructor(
+    @InjectRepository(Producto)
+    private readonly productoRepository: Repository<Producto>,
+  ) {}
+
+  async create(createProductoDto: CreateProductoDto, imagenes: string[] = []) {
+    const nuevoProducto = this.productoRepository.create({
+      sku: createProductoDto.sku,
+      nombre: createProductoDto.nombre,
+      marca: createProductoDto.marca,
+      costo: Number(createProductoDto.costo),
+      precio: Number(createProductoDto.precio),
+      descripcion: createProductoDto.descripcion,
+      garantia: createProductoDto.garantia,
+      etiquetas: createProductoDto.etiquetas,
+      activo: createProductoDto.estado !== 'pausado',
+      imagenes,
+    });
+
+    return await this.productoRepository.save(nuevoProducto);
   }
 
-  findAll() {
-    return `This action returns all productos`;
+  async findAll() {
+    return await this.productoRepository.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} producto`;
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  update(id: number, updateProductoDto: UpdateProductoDto) {
-    return `This action updates a #${id} producto`;
+  async findOne(id: string) {
+    const producto = await this.productoRepository.findOne({
+      where: { id },
+    });
+    if (!producto) {
+      throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+    }
+    return producto;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} producto`;
+  async update(id: string, updateProductoDto: UpdateProductoDto) {
+    const producto = await this.findOne(id);
+    Object.assign(producto, {
+      ...updateProductoDto,
+      ...(updateProductoDto.costo !== undefined && {
+        costo: Number(updateProductoDto.costo),
+      }),
+      ...(updateProductoDto.precio !== undefined && {
+        precio: Number(updateProductoDto.precio),
+      }),
+      ...(updateProductoDto.estado !== undefined && {
+        activo: updateProductoDto.estado === 'activo',
+      }),
+    });
+    return await this.productoRepository.save(producto);
+  }
+
+  async remove(id: string) {
+    const producto = await this.findOne(id);
+    producto.activo = false; // Baja lógica según RF-02
+    return await this.productoRepository.save(producto);
   }
 }
