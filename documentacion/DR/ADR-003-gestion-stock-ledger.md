@@ -51,3 +51,27 @@ Se crea la tabla `stock_movements` con los siguientes campos:
 ### Negativas / Mitigaciones
 * Mayor volumen de filas a lo largo del tiempo.
 * *Mitigación:* Se crearon índices compuestos `(variante_id, created_at)` y vistas materializadas/cacheadas para consultas de alta concurrencia en el catálogo.
+
+---
+
+## 4. Extracción manual y garantías de integridad (STOCK-02 / STOCK-03)
+
+* **Endpoint dedicado:** `POST /api/stock/extracciones-manuales` (solo `administrador`) fuerza `EXTRACCION_MANUAL` y exige `variante_id`, `cantidad` entera > 0 y `motivo` (mínimo 5 caracteres).
+* **Auditoría no falsificable:** `usuario_id` nunca viaja en el cuerpo de la petición; se toma siempre del token JWT.
+* **Saldo calculado en SQL:** `GET /api/stock/variantes/:id` agrega los totales por tipo con `SUM ... GROUP BY`, en lugar de cargar el historial en memoria.
+* **Sin sobreventa por concurrencia:** las salidas (`VENTA` y `EXTRACCION_MANUAL`) toman un `pg_advisory_xact_lock` por variante dentro de la transacción antes de validar el saldo.
+* **Inmutabilidad real en la base:** al iniciar el módulo se instala de forma idempotente el trigger `trg_prevent_stock_movement_mutation`, de modo que no depende de ejecutar el script SQL a mano cuando el esquema lo crea TypeORM (`synchronize`).
+* **Consulta del historial:** `GET /api/stock/movimientos` admite `limit`, `offset`, `tipo_movimiento` y `variante_id`.
+
+---
+
+## 5. Alertas de stock bajo y monitoreo de reposición (STOCK-04)
+
+* **Consulta agregada en SQL con cláusula `HAVING`:** `GET /api/stock/alertas?umbral=N` calcula existencias consolidadas por variante agrupando el libro mayor en tiempo real (`GROUP BY m.variante_id HAVING existencias <= :umbral`), evitando cálculos iterativos en memoria o lecturas completas de la tabla.
+* **Clasificación por severidad:**
+  * `agotado`: existencias $\le 0$ unidades (quiebre de inventario total).
+  * `critico`: existencias $\le \lfloor\text{umbral} / 2\rfloor$ (riesgo inminente).
+  * `bajo`: existencias $\le \text{umbral}$ (punto de reposición alcanzado).
+* **Control RBAC:** Endpoint estrictamente protegido para rol `administrador`.
+* **Integración en panel administrativo:** Indicador reactivo de alertas en la navegación lateral del backoffice y panel interactivo con atajos rápidos de extracción y auditoría.
+
