@@ -34,7 +34,7 @@ export class ProductosController {
   )
   create(
     @Body() createProductoDto: CreateProductoDto,
-    @UploadedFiles() files: Array<any>,
+    @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
     const rutasImagenes = (files || []).map(
       (file) => `/uploads/productos/${file.filename}`,
