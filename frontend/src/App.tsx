@@ -6,6 +6,7 @@ import { RegisterForm } from './components/Register/RegisterForm';
 import { ResetPasswordForm } from './components/ResetPassword/ResetPasswordForm';
 import { AddressBook } from './components/AddressBook/AddressBook';
 import { StockBackoffice } from './components/Stock/StockBackoffice';
+import { AdminProductForm } from './components/AdminProducts/AdminProductForm';
 import { catalogApi, messageFromError } from './components/Catalog/api';
 import type { Categoria, Producto, Variante } from './components/Catalog/api';
 import { StoreHeader } from './components/Storefront/StoreHeader';
@@ -479,15 +480,18 @@ export default function App() {
 
   if (activeView === 'backoffice') {
     return (
-      <StockBackoffice
-        activeUser={activeUser}
-        onGoToStore={() => {
-          setStoreReloadNonce((n) => n + 1);
-          navigateTo('home');
-        }}
-        onGoToLogin={() => navigateTo('login')}
-        onLogout={handleLogout}
-      />
+      <>
+        <StockBackoffice
+          activeUser={activeUser}
+          onGoToStore={() => {
+            setStoreReloadNonce((n) => n + 1);
+            navigateTo('home');
+          }}
+          onGoToLogin={() => navigateTo('login')}
+          onLogout={handleLogout}
+        />
+        <AdminProductForm />
+      </>
     );
   }
 

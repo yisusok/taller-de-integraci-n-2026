@@ -34,6 +34,12 @@ export class Producto {
   @Column({ type: 'varchar', length: 100, nullable: true })
   garantia!: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  etiquetas!: string;
+
+  @Column({ type: 'simple-array', nullable: true })
+  imagenes!: string[];
+
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
